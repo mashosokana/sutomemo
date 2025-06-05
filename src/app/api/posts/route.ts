@@ -42,3 +42,41 @@ export const GET = async (request: NextRequest) => {
 
   return NextResponse.json(result)
 }
+
+export const POST = async (request: NextRequest) => {
+  const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if ( error || !data?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = data.user.id
+  const body = await request.json();
+  const { caption } = body;
+
+  const newPost = await prisma.post.create({
+    data: {
+      userId: userId,
+      caption: caption,
+      status: "draft",
+      memo: {
+        create: {
+          freeMemo: "",
+          answerWhy: "",
+          answerWhat: "",
+          answerNext: "",
+        },
+      },
+      images: {
+        create: [],
+      },
+    },
+    include: {
+      memo: true,
+      images: true,
+    },
+  });
+
+  return NextResponse.json(newPost, { status: 201 });
+}
