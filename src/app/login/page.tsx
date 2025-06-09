@@ -30,6 +30,9 @@ export default function LoginPage() {
     if (error) {
       setErrorMessage(error.message)
     } else {
+
+      localStorage.setItem("token", data.session.access_token);
+      
       router.replace('/dashboard')
     }
   }

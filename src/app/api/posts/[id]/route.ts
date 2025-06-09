@@ -64,13 +64,17 @@ export const DELETE = async (request: NextRequest, { params }: { params: { id: s
     return NextResponse.json({ error: "Unauthorized" }, { status: 401});
   }
 
+  const postId = Number(params.id);
+  if (isNaN(postId)) {
+    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  }
 
-  await prisma.memo.deleteMany({ where: { postId: Number(params.id) } });
-  await prisma.image.deleteMany({ where: { postId: Number(params.id) } });
+  console.log("削除対象のpostId:", postId);
 
-  const deletedPost = await prisma.post.delete({
-    where: { id: Number(params.id) },
-  });
+  await prisma.memo.deleteMany({ where: { postId } });
+  await prisma.image.deleteMany({ where: { postId } });
+  
+  const deleted = await prisma.post.delete({ where: { id: postId } });
 
-  return NextResponse.json(deletedPost);
+  return NextResponse.json(deleted);
 } 

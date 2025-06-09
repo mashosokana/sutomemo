@@ -13,3 +13,17 @@ export const GET = async (request: NextRequest, { params }: { params: { postId: 
   })));
 
 }
+
+export const POST = async (request: NextRequest, { params }: { params: { postId: string } }) => {
+  const postId = Number(params.postId);
+  const body = await request.json();
+  const { url } = body;
+  const newImage = await prisma.image.create({
+    data: {
+      postId,
+      url,
+    },
+  });
+
+  return NextResponse.json(newImage);
+}
