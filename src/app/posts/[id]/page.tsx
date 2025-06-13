@@ -1,8 +1,20 @@
+// app/posts/[id]/page.tsx
 "use client"
+
+import useSWR from 'swr'
+import { fetcher } from '@/utils/fetcher';
 import { useRouter } from "next/navigation";
+import MemoForm from '@/app/components/MemoForm';
 
 export default function PostDetailPage({ params }: { params: { id: string} }) {
-const router = useRouter();
+const router = useRouter()
+
+const {
+  data: post,
+  error,
+  isLoading,
+  mutate,
+} = useSWR(`/api/posts/${params.id}`, fetcher)
 
   const handleDelate = async () => {
     const token = localStorage.getItem("token");
@@ -24,12 +36,19 @@ const router = useRouter();
     }
   };
 
- return (
-  <div>
-    <h1>投稿詳細ページ</h1>
-    <p>投稿Id: {params.id}</p>
+  if (isLoading) return <p className='p-4'>読み込み中</p>
+  if (error) return <p className='p-4 text-red-600'>取得失敗</p>
+  if (!post) return <p className='p-4'>存在しない投稿です</p>
 
-    <button onClick={handleDelate}>削除</button>
+ return (
+  <div className='p-4 space-y-4'>
+    <h1 className='text-x1 font-bold'>{post.caption}</h1>
+
+    <MemoForm postId={post.id} memo={post.memo} onSaved={mutate} />
+
+    <button onClick={handleDelate} className='text-red-500'>
+      削除
+      </button>
   </div>
  ); 
 }

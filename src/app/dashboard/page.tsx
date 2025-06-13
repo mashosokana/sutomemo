@@ -1,8 +1,9 @@
 // app/dashboard/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/utils/supabase"
+import useSWR from "swr"
+import { fetcher } from "@/utils/fetcher"
+
 
 type Post = {
   id: number
@@ -13,45 +14,22 @@ type Post = {
   updatedAt: string
 }
 
-
 export default function DashboardPage() {
-  const [posts, setPosts] = useState<Post[]>([])
 
-  useEffect(() => {
-    const fetchPosts = async () => {
-      
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
+  const { data: posts = [], 
+    error, 
+    isLoading,
+   } = useSWR<Post []>("/api/posts", fetcher)
 
-        if (!user) return
-        
-        const { data, error } = await supabase
-          .from("posts")
-          .select("*")
-          .eq("userId", user.id)
-          .order("createdAt", { ascending: false })
-
-        if (error) {
-          console.error("投稿取得エラー:", error)
-        } else {
-          setPosts(data)
-        }
-        
-        console.log("ログインユーザーID:", user.id)
-        console.log("取得した投稿データ:", data)
-
-    }    
-    
-    fetchPosts()
-  }, [])
+   if (isLoading) return <main className="p-4">読み込み中...</main>
+   if (error) return <main className="p-4 text-red-600">取得失敗</main>
 
   return (
     <main className="p-4">
-      {posts.length === 0 ? (
+      {posts!.length === 0 ? (
         <p>投稿がありません</p>
       ) : (
-        posts.map((post) => (
+        posts!.map((post) => (
           <div key={post.id} className="border p-4 rounded-lg shadow mb-4">
             <p className="font-bold">{post.caption}</p>
             <p className="text-sm text-gray-500">
@@ -65,7 +43,7 @@ export default function DashboardPage() {
             </a>
           </div>
         ))
-      )}
+      )}    
     </main>
-  )
+  ) 
 }
