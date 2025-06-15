@@ -3,6 +3,9 @@
 
 import useSWR from "swr"
 import { fetcher } from "@/utils/fetcher"
+import { useRouter } from "next/navigation"
+import Card from "../components/Card"
+import PrimaryButton from '@/app/components/PrimaryButton'  // 今回は使わなくてもOK
 
 
 type Post = {
@@ -15,24 +18,28 @@ type Post = {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
 
   const { data: posts = [], 
     error, 
     isLoading,
    } = useSWR<Post []>("/api/posts", fetcher)
+  console.log(posts.length)
 
    if (isLoading) return <main className="p-4">読み込み中...</main>
    if (error) return <main className="p-4 text-red-600">取得失敗</main>
 
   return (
-    <main className="p-4">
+    <main className="p-4 space-y-4 max-w-phone mx-auto">
       {posts!.length === 0 ? (
         <p>投稿がありません</p>
       ) : (
-        posts!.map((post) => (
-          <div key={post.id} className="border p-4 rounded-lg shadow mb-4">
+        posts!.map((post) => {
+          console.log('render card', post.id)
+          return (
+            <Card key={post.id}>
             <p className="font-bold">{post.caption}</p>
-            <p className="text-sm text-gray-500">
+            <p className="border border-gray-300 bg-white">
               {new Date(post.createdAt).toLocaleString()}
             </p>
             <a
@@ -41,9 +48,13 @@ export default function DashboardPage() {
               >
               投稿詳細へ
             </a>
-          </div>
-        ))
-      )}    
+          </Card>
+          ) 
+        })
+      )}
+      <PrimaryButton onClick={() => router.push('/compose/input')}>
+        新規投稿
+      </PrimaryButton>    
     </main>
   ) 
 }

@@ -19,8 +19,10 @@ const config: Config = {
         card:     "#FFFFFF",   // 投稿カード背景
       },
       
-      fontFamily: {
-       sans: ['"Noto Sans JP"', "Inter", "sans-serif"],
+      extend: {
+        fontFamily: {
+          sans: ['"Noto Sans JP"', 'sans-serif'], // ← 先頭が Noto なら OK
+        },
       },
       
       maxWidth: {

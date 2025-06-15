@@ -41,12 +41,12 @@ const {
   if (!post) return <p className='p-4'>存在しない投稿です</p>
 
  return (
-  <div className='p-4 space-y-4'>
-    <h1 className='text-x1 font-bold'>{post.caption}</h1>
+  <div className='font-sans font-sans p-4 space-y-4'>
+    <h1 className="font-sans font-sans text-2xl">{post.caption}</h1>
 
     <MemoForm postId={post.id} memo={post.memo} onSaved={mutate} />
 
-    <button onClick={handleDelate} className='text-red-500'>
+    <button onClick={handleDelate} className='font-sans text-red-500'>
       削除
       </button>
   </div>
