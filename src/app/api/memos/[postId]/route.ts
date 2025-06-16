@@ -13,7 +13,8 @@ export const PUT =async (request: NextRequest, { params }: { params: { postId: s
   const body =await request.json();
   const { freeMemo, answerWhy, answerWhat, answerNext } = body;
 
-  const updatedMemo = await prisma.memo.update({
+  const [updatedMemo] = await prisma.$transaction([
+    prisma.memo.update({
     where: { postId: Number(params.postId) },
     data: {
       freeMemo,
@@ -22,7 +23,12 @@ export const PUT =async (request: NextRequest, { params }: { params: { postId: s
       answerNext,
       updatedAt: new Date(),
     },
-  });
+  }),
+  prisma.post.update({
+    where: { id: Number(params.postId) },
+    data: { caption: freeMemo },
+  }),
+])
 
-  return NextResponse.json(updatedMemo);
+return NextResponse.json(updatedMemo)
 }

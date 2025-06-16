@@ -1,4 +1,7 @@
 // components/Card.tsx
+// src/app/components/Card.tsx
+'use client'
+
 export default function Card({
   children,
   className = '',
@@ -7,8 +10,17 @@ export default function Card({
   className?: string
 }) {
   return (
-    <div className={`rounded-md shadow p-4 ${className}`}>
+    <div
+      className={`
+        bg-white               /* 背景 */
+        rounded-md             /* 角丸 4px */
+        border border-gray-200 /* 枠線 */
+        shadow-sm              /* 薄い影 */
+        p-4                    /* 余白 */
+        ${className}           /* 追加クラスを後ろに */
+      `}
+    >
       {children}
     </div>
-  )
+  );
 }

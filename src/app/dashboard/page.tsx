@@ -30,7 +30,7 @@ export default function DashboardPage() {
    if (error) return <main className="p-4 text-red-600">取得失敗</main>
 
   return (
-    <main className="p-4 space-y-4 max-w-phone mx-auto">
+    <main className="p-4 space-y-6 max-w-phone mx-auto">
       {posts!.length === 0 ? (
         <p>投稿がありません</p>
       ) : (

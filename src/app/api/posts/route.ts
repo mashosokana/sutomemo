@@ -1,3 +1,4 @@
+//api/posts/route.ts
 import { NextResponse, NextRequest } from "next/server"
 import { supabase } from "@/utils/supabase"
 import { prisma } from "@/utils/prisma"
@@ -51,32 +52,42 @@ export const POST = async (request: NextRequest) => {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = data.user.id
-  const body = await request.json();
-  const { caption } = body;
+  const body = await request.json()
+  const {
+    caption,
+    status = 'draft',
+    memo: memoInput = {},      // ← memo が無い場合は空オブジェクト
+  }: {
+    caption: string
+    status?: 'draft' | 'published'
+    memo?: {
+      freeMemo?: string
+      answerWhy?: string
+      answerWhat?: string
+      answerNext?: string
+    }
+  } = body
 
+  /* ② DB へ保存 */
   const newPost = await prisma.post.create({
     data: {
-      userId: userId,
-      caption: caption,
-      status: "draft",
+      userId: data.user.id,
+      caption,
+      status,
       memo: {
         create: {
-          freeMemo: "",
-          answerWhy: "",
-          answerWhat: "",
-          answerNext: "",
+          freeMemo: memoInput.freeMemo ?? '',
+          answerWhy: memoInput.answerWhy ?? '',
+          answerWhat: memoInput.answerWhat ?? '',
+          answerNext: memoInput.answerNext ?? '',
         },
       },
       images: {
-        create: [],
+        create: [], // 画像は後で追加予定
       },
     },
-    include: {
-      memo: true,
-      images: true,
-    },
-  });
+    include: { memo: true, images: true },
+  })
 
-  return NextResponse.json(newPost, { status: 201 });
+  return NextResponse.json(newPost, { status: 201 })
 }
