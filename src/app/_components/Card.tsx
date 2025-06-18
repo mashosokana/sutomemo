@@ -1,5 +1,5 @@
 // components/Card.tsx
-// src/app/components/Card.tsx
+// src/app/_components/Card.tsx
 'use client'
 
 export default function Card({

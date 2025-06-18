@@ -4,8 +4,8 @@
 import useSWR from "swr"
 import { fetcher } from "@/utils/fetcher"
 import { useRouter } from "next/navigation"
-import Card from "../components/Card"
-import PrimaryButton from '@/app/components/PrimaryButton'  // 今回は使わなくてもOK
+import Card from "../_components/Card"
+import PrimaryButton from '@/app/_components/PrimaryButton'  // 今回は使わなくてもOK
 
 
 type Post = {

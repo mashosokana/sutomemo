@@ -4,7 +4,7 @@
 import useSWR from 'swr'
 import { fetcher } from '@/utils/fetcher';
 import { useRouter } from "next/navigation";
-import MemoForm from '@/app/components/MemoForm';
+import MemoForm from '@/app/_components/MemoForm';
 
 export default function PostDetailPage({ params }: { params: { id: string} }) {
 const router = useRouter()
