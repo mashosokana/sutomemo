@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/utils/supabase'
+import Input from '@/app/_components/Input'
 
 export default function ImageUploader({
   postId,
@@ -57,10 +58,11 @@ export default function ImageUploader({
 
   return (
     <div className="space-y-2">
-      <input
+      <Input
         type="file"
         accept="image/*"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        className="file:border file:mr-4 file:px-3 file:py-1"
       />
       <button
         onClick={handleUpload}

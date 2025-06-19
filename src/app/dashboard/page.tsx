@@ -5,8 +5,13 @@ import useSWR from "swr"
 import { fetcher } from "@/utils/fetcher"
 import { useRouter } from "next/navigation"
 import Card from "../_components/Card"
-import PrimaryButton from '@/app/_components/PrimaryButton'  // 今回は使わなくてもOK
+import PrimaryButton from '@/app/_components/PrimaryButton'
+import Image from 'next/image'
 
+type Image = {
+  id: number
+  url: string
+}
 
 type Post = {
   id: number
@@ -15,6 +20,7 @@ type Post = {
   status: "draft" | "published" | "archived" | "deleted"
   createdAt: string
   updatedAt: string
+  images: Image[] 
 }
 
 export default function DashboardPage() {
@@ -38,6 +44,16 @@ export default function DashboardPage() {
           console.log('render card', post.id)
           return (
             <Card key={post.id}>
+              {post.images?.[0] && (
+               <Image
+                 src={post.images[0].url}
+                 alt={post.caption || 'post image'}
+                 width={400} 
+                 height={160}
+                 className="w-full h-40 object-cover rounded-md mb-2"
+                 unoptimized
+                />
+              )}
             <p className="font-bold">{post.caption}</p>
             <p className="border border-gray-300 bg-white">
               {new Date(post.createdAt).toLocaleString()}

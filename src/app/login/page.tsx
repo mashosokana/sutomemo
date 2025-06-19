@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
+import Input from '@/app/_components/Input'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -47,14 +48,14 @@ export default function LoginPage() {
             <label htmlFor='email' className='block mb-2 text-sm font-medium text-gray-700'>
               メールアドレス
             </label>
-            <input
+            <Input
               type='email'
               id='email'
-              className='block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500'
               placeholder='name@example.com'
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              isError={Boolean(errorMessage)}
             />
           </div>
 
@@ -62,14 +63,14 @@ export default function LoginPage() {
             <label htmlFor='password' className='block mb-2 text-sm font-medium text-gray-700'>
               パスワード
             </label>
-            <input
+            <Input
               type='password'
               id='password'
-              className='block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-black'
               placeholder='••••••••'
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              isError={Boolean(errorMessage)}
             />
           </div>
 

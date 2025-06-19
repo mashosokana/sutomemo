@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
+import Input from '@/app/_components/Input'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -46,15 +47,14 @@ export default function SignUpPage() {
           >
             メールアドレス
           </label>
-          <input
+          <Input
             type='email'
-            name='email'
             id='email'
-            className='bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5'
             placeholder='name@company.com'
             required
-            onChange={(e) => setEmail(e.target.value)}
             value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            isError={Boolean(errorMessage)}
           />
         </div>
         <div>
@@ -64,15 +64,14 @@ export default function SignUpPage() {
           >
             パスワード
           </label>
-          <input
+          <Input
             type='password'
-            name='password'
             id='password'
             placeholder='••••••••'
-            className='bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5'
             required
-            onChange={(e) => setPassword(e.target.value)}
             value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            isError={Boolean(errorMessage)}
           />
         </div>
           <p className='text-red-500 text-sm text-center'>
