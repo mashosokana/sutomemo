@@ -82,8 +82,6 @@ export default function LoginPage() {
           {loading ? 'ログイン中...' : 'ログイン'}
         </button> 
       </form>
-
-      {/* 新規登録やパスワード忘れのリンクは後で追加予定 */}
      </div>
     </main>
   )
