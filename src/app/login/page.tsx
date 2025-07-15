@@ -1,41 +1,36 @@
 //src/app/login/page.tsx
+
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/utils/supabase'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/utils/supabase'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const router = useRouter()
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-
     setErrorMessage('')
     setLoading(true)
 
-    const { error,data } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
-
-    console.log(data?.session?.access_token);
 
     setLoading(false)
 
     if (error) {
       setErrorMessage(error.message)
-    } else {
-
-      localStorage.setItem("token", data.session.access_token);
-      
-      router.replace('/dashboard')
+      return
     }
+
+    router.push('/dashboard')
   }
 
   return (

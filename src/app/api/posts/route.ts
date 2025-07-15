@@ -1,93 +1,93 @@
 //api/posts/route.ts
-import { NextResponse, NextRequest } from "next/server"
-import { supabase } from "@/utils/supabase"
-import { prisma } from "@/utils/prisma"
 
-export const GET = async (request: NextRequest) => {
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { prisma } from "@/utils/prisma";
 
-  const { data, error } = await supabase.auth.getUser(token)
-  if (error || !data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+export async function POST(req: Request) {
+  try {
+    const supabase = createRouteHandlerClient({ cookies });
+    const {
+      data: { user },
+    } =await supabase.auth.getUser();
 
-  const userId = data.user.id
-  const posts = await prisma.post.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      images: true,
-      memo: true,
+    if (!user) {
+      return NextResponse.json({ message: "認証エラー（ログインしていません）" }, { status: 401 });
     }
-  })
 
-  const result = posts.map(post => ({
-    id: post.id,
-    caption: post.caption,
-    status: post.status,
-    createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-    images: post.images.map(img => ({
-      id: img.id,
-      url: img.url,
-    })),
-    memo: post.memo
-      ? {
-          freeMemo: post.memo.freeMemo,
-          answerWhy: post.memo.answerWhy,
-          answerWhat: post.memo.answerWhat,
-          answerNext: post.memo.answerNext,
+    console.log("投稿ユーザーID:", user.id);
+
+    await prisma.user.upsert({
+      where: {id: user.id },
+      update: {},
+      create: {
+        id: user.id,
+      },
+    });
+
+    const body = await req.json();
+    const { caption, memo } = body;
+
+    if (!caption || !memo ) {
+      return NextResponse.json({ message: 'caption、memoは必須です'}, {status: 400 })
+    }
+
+    const { answerWhy, answerWhat, answerNext } = memo
+
+    const post = await prisma.post.create({
+      data: {
+        userId: user.id,
+        caption,
+        memo: {
+          create:{
+            answerWhy,
+            answerWhat,
+            answerNext,
+          }
         }
-      : null,
-  }))
+      },
+    })
 
-  return NextResponse.json(result)
+    return NextResponse.json(post, { status: 200 })
+  } catch (error) {
+    console.error("投稿中にサーバーエラー:", error);
+    return NextResponse.json({ message: 'サーバーエラー' }, { status: 500 })
+  }  
 }
 
-export const POST = async (request: NextRequest) => {
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "")
-  const { data, error } = await supabase.auth.getUser(token);
+export async function GET() {
+  try {
+    const supabase = createRouteHandlerClient({ cookies });
+    const { data: { user } } = await supabase.auth.getUser();
 
-  if ( error || !data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await request.json()
-  const {
-    caption,
-    status = 'draft',
-    memo: memoInput = {},      // ← memo が無い場合は空オブジェクト
-  }: {
-    caption: string
-    status?: 'draft' | 'published'
-    memo?: {
-      freeMemo?: string
-      answerWhy?: string
-      answerWhat?: string
-      answerNext?: string
+    if (!user) {
+      return NextResponse.json({ message: "認証エラー（ログインしてません" }, {status: 401 });
     }
-  } = body
 
-  /* ② DB へ保存 */
-  const newPost = await prisma.post.create({
-    data: {
-      userId: data.user.id,
-      caption,
-      status,
-      memo: {
-        create: {
-          freeMemo: memoInput.freeMemo ?? '',
-          answerWhy: memoInput.answerWhy ?? '',
-          answerWhat: memoInput.answerWhat ?? '',
-          answerNext: memoInput.answerNext ?? '',
+    const posts =await prisma.post.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include:{
+        memo: {
+          select: {
+            answerWhy: true,
+            answerWhat: true,
+            answerNext: true,
+          },
         },
       },
-      images: {
-        create: [], // 画像は後で追加予定
-      },
-    },
-    include: { memo: true, images: true },
-  })
+    });
 
-  return NextResponse.json(newPost, { status: 201 })
+    return NextResponse.json(posts, { status: 200 })
+  } catch (error) {
+    console.error("GET /api/posts エラー:", error);
+    return NextResponse.json({ message: "サーバーエラー" }, { status: 500 })
+  }
 }
+
+  

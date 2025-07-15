@@ -1,3 +1,4 @@
+//src/spp/signup-success/page.tsx
 import Link from 'next/link';
 
 export default function SignUpSuccessPage() {

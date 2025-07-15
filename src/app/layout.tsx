@@ -1,17 +1,22 @@
-//src/app/layout.tsx
-import { Noto_Sans_JP } from 'next/font/google'
-import "./globals.css"   // これが無いと CSS が読み込まれません
+// app/layout.tsx
 
-const noto = Noto_Sans_JP({
-  weight: ['400', '700'],
-  subsets: ['latin'],
-  display: 'swap',
-})
+import "./globals.css"
+import Header from "./_components/Header"
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const metadata = {
+  title: "SutoMemo",
+  description: "学習の記録メモアプリ",
+}
+
+export default function RootLayout({ children }: {children:  React.ReactNode }) {
   return (
-    <html lang="ja" className={noto.className}>
-      <body className="antialiased">{children}</body>
+    <html lang="ja">
+      <body className="gb-gray-50 text-white">
+        <Header />
+        <main className="max-w-3xl mx-auto mt-8 px-4">
+          {children}
+        </main>
+      </body>
     </html>
   )
 }

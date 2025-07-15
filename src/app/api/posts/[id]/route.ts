@@ -1,80 +1,71 @@
-import { NextRequest, NextResponse } from "next/server";
+// src/app/api/posts/[id]/route.ts
+
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers';
+import { NextResponse } from "next/server";
 import { prisma } from "@/utils/prisma";
-import { supabase } from "@/utils/supabase";
 
-export const GET = async (request: NextRequest, { params }: { params: { id: string } }) => {
-  console.log("ID:", params.id);
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
+export async function PUT(req: Request, { params }: { params: { id: string } })  {
+  
+  const supabase = createRouteHandlerClient({ cookies })
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (error || !data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const post = await prisma.post.findUnique({
-    where: { id: Number(params.id )},
-    include: {
-      images: true,
-      memo: true,
+  await prisma.user.upsert({
+    where: { id: user.id},
+    update: {},
+    create: {
+      id: user.id,
     },
-  }) 
+  });
+
+  const postId = Number(params.id);
+  const body = await req.json();
+  const { caption, memo } = body;
+  const { answerWhy, answerWhat, answerNext } = memo ?? {};
+
+  const existingPost = await prisma.post.findUnique({
+    where: {
+      id: postId,
+    },
+  });
   
-  if (!post) {
-    return NextResponse.json({ error: "Not found" }, { status: 404});
+  if (!existingPost) {
+    return NextResponse.json({ error: 'Post not found' }, {status: 404})
   }
 
-  // ★ここでpostの中身を確認
-  console.log("取得したpost:", post);
-
-  return NextResponse.json(post);
-};
-
-export const PUT = async (request: NextRequest, { params }: { params: { id: string } }) => {
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-  
-  if (error || !data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401});
+  if (existingPost.userId !== user.id) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const body = await request.json();
-  const { caption, status } = body; 
+  await prisma.memo.deleteMany({
+    where: { postId }
+  });
   
   const updatedPost = await prisma.post.update({
-    where: { id:Number(params.id) },
+    where: {
+       id: postId,
+    },
     data: {
       caption,
-      status,
-      updatedAt: new Date(),
+      memo: {
+        create:{
+          answerWhy,
+          answerWhat,
+          answerNext,
+        }
+      }
     },
     include: {
-      images: true,
       memo: true,
     },
   });
 
-  return NextResponse.json(updatedPost);
-}
-
-export const DELETE = async (request: NextRequest, { params }: { params: { id: string } }) => {
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-
-  if (error || !data?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401});
-  }
-
-  const postId = Number(params.id);
-  if (isNaN(postId)) {
-    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
-  }
-
-  console.log("削除対象のpostId:", postId);
-
-  await prisma.memo.deleteMany({ where: { postId } });
-  await prisma.image.deleteMany({ where: { postId } });
+  return NextResponse.json(updatedPost)
   
-  const deleted = await prisma.post.delete({ where: { id: postId } });
-
-  return NextResponse.json(deleted);
 } 
