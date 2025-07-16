@@ -1,6 +1,6 @@
 // src/app/hooks/useSupabaseSession.ts
 
-import { supabase } from "@/utils/supabase";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js"
 

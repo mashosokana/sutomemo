@@ -1,6 +1,6 @@
 // app/dashboard/page.tsx
 
-import { prisma } from "@/utils/prisma";
+import { prisma } from "@/lib/prisma";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation"; 

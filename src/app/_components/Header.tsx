@@ -5,7 +5,7 @@ import { useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession"
-import { supabase } from "@/utils/supabase"
+import { supabase } from "@/lib/supabase"
 
 export default function Header() {
   const router = useRouter()
@@ -14,7 +14,6 @@ export default function Header() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push("/login")
-    window.location.reload()
   }
 
   useEffect(() => {
@@ -23,7 +22,7 @@ export default function Header() {
   
 
   return (
-    <header className="bg-gray-100 p-4 flex justify-between item-center shadow">
+    <header className="bg-gray-100 p-4 flex justify-between items-center shadow">
       <Link href="/" className="text-lg font-bold text-blue-600">
         SutoMemo
       </Link>

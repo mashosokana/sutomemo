@@ -1,5 +1,5 @@
 // app/posts/[id]/page.tsx
-import { prisma } from "@/utils/prisma";
+import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 

@@ -1,19 +1,23 @@
 // src/app/api/posts/[id]/route.ts
 
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers';
 import { NextResponse } from "next/server";
-import { prisma } from "@/utils/prisma";
+import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function PUT(req: Request, { params }: { params: { id: string } })  {
-  
-  const supabase = createRouteHandlerClient({ cookies })
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const postId = Number(params.id);
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token){
+    return NextResponse.json({ error: "トークンがありません"}, { status: 401});
+  }
+
+  const { data: userData, error } = await supabaseAdmin.auth.getUser(token);
+  const user = userData?.user;
+
+  if (error || !user) {
+    console.error("認証エラー:", error)
+    return NextResponse.json({ error: "認証エラー" }, { status: 401 });
   }
 
   await prisma.user.upsert({
@@ -24,11 +28,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     },
   });
 
-  const postId = Number(params.id);
-  const body = await req.json();
-  const { caption, memo } = body;
-  const { answerWhy, answerWhat, answerNext } = memo ?? {};
-
   const existingPost = await prisma.post.findUnique({
     where: {
       id: postId,
@@ -36,14 +35,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   });
   
   if (!existingPost) {
-    return NextResponse.json({ error: 'Post not found' }, {status: 404})
+    return NextResponse.json({ error: "投稿が存在しません" }, {status: 404})
   }
 
   if (existingPost.userId !== user.id) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    return NextResponse.json({ error: "この投稿を編集する権限がありません" }, { status: 403 });
   }
 
-  await prisma.memo.deleteMany({
+  const body = await req.json();
+  const { caption, memo } = body;
+  const { answerWhy, answerWhat, answerNext } = memo ?? {};
+
+  if (!caption || !memo) {
+    return NextResponse.json({ error: "captionとmemoは必須です" }, { status: 400 });
+  }
+
+  await prisma.memo.delete({
     where: { postId }
   });
   
