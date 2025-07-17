@@ -13,7 +13,7 @@ export default function EditForm({ id }: Props) {
 const router = useRouter()
 const { token, isLoading: authLoading } = useSupabaseSession()
 
-  const [Caption, setCaption] = useState("")
+  const [caption, setCaption] = useState("")
   const [answerWhy, setAnswerWhy] = useState("")
   const [answerWhat, setAnswerWhat] = useState("")
   const [answerNext, setAnswerNext] = useState("")
@@ -36,7 +36,8 @@ const { token, isLoading: authLoading } = useSupabaseSession()
           throw new Error(error?.error || "投稿取得に失敗しました");
         }
 
-        const post = await res.json();
+        const { post } = await res.json();
+
         setCaption(post.caption || "");
         setAnswerWhy(post.memo?.answerWhy || "");
         setAnswerWhat(post.memo?.answerWhat || "");
@@ -64,13 +65,13 @@ const { token, isLoading: authLoading } = useSupabaseSession()
 
     try {
       const res = await fetch(`/api/posts/${id}`, {
-        method: "POST",
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          Caption,
+          caption,
           memo: {
             answerWhy,
             answerWhat,
@@ -100,7 +101,7 @@ const { token, isLoading: authLoading } = useSupabaseSession()
       <label className="block font-bold mb-1">やったこと学んだことをメモ</label>
      <input
         className="w-full border p-2 text-black"
-        value={Caption}
+        value={caption}
         onChange={(e) => setCaption(e.target.value)}
         placeholder="タイトル"
       />
@@ -134,7 +135,7 @@ const { token, isLoading: authLoading } = useSupabaseSession()
 
       <div className="flex space-x-4">
         <button
-          className="bg-black text-white px-4 px-2 rounded hover:opacity-80"
+          className="bg-black text-white px-4 py-2 rounded hover:opacity-80"
           onClick={handleUpdate}
         >
           更新する

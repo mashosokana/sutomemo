@@ -73,6 +73,38 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     },
   });
 
-  return NextResponse.json(updatedPost)
-  
+  return NextResponse.json(updatedPost) 
 } 
+
+export async function GET(req: NextResponse, { params }: { params: { id: string}} ) {
+  const postId = Number(params.id);
+
+  const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token) {
+    return NextResponse.json({ error: "トークンがありません"}, { status: 401 });
+  }
+
+  const { data: userData, error } = await supabaseAdmin.auth.getUser(token);
+  const user = userData?.user;
+
+  if (error || !user) {
+    console.error("認証エラー", error);
+    return NextResponse.json({ error: "認証エラー"}, { status: 401 });
+  }
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId},
+    include: {
+      memo: true,
+    },
+  });
+
+  if (!post) {
+    return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
+  }
+
+  if (post.userId !== user.id) {
+    return NextResponse.json({ error: "この投稿にアクセスする権限がありません" },{ status: 403 });
+  }
+  return NextResponse.json({ post });
+}
