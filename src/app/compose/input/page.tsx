@@ -1,19 +1,23 @@
 //app/compose/input/page.tsx
-import { redirect } from "next/navigation"
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+"use client"
+
+import { useEffect } from "react";
+import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
 import ComposeInputForm from "./form";
+import { useRouter } from "next/navigation";
 
-export default async function ComposeInputPage() {
-  const supabase =createServerComponentClient({ cookies });
+export default function ComposeInputPage() {
+  const router = useRouter()
+  const { session, isLoading, token } = useSupabaseSession()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  useEffect(() => {
+    if (!isLoading && !session) {
+      router.replace('/login')
+    }
+  }, [isLoading, session, router])
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (isLoading) return <div className="p-4">読み込み中...</div>
+  if (!session) return null
 
-  return <ComposeInputForm userId={user.id} />; 
-} 
+  return <ComposeInputForm userId={session.user.id} token={token} />
+}
