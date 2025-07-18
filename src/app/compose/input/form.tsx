@@ -41,14 +41,23 @@ export default function ComposeInputForm({ token }: Props){
         },
         body:JSON.stringify(postData),
       });
+
+      const data = await res.json();
     
-      if (!res.ok) throw new Error("投稿に失敗しました");
-    
-      const post = await res.json();
-      router.push(`/posts/${post.id}`);
-    } catch (err: unknown) {
-      console.error(err)
-      alert("送信中にエラーが発生しました")
+      if (!res.ok) {
+        throw new Error(data.error || "投稿に失敗しました");
+      }
+
+      console.log("保存成功:", data);
+
+      const postId = data.post?.id;
+      if (!postId) {
+        throw new Error("投稿IDが取得できませんでした")
+      }
+      router.push(`/posts/${postId}`);
+    } catch (err) {
+      console.error("投稿エラー",err);
+      alert("送信中にエラーが発生しました");
       }
   };
 

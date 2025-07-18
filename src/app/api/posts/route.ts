@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json(post, { status: 200 })
+  return NextResponse.json({ post }, { status: 200 });
 }
 
 export async function GET(req: Request) {
@@ -77,7 +77,7 @@ export async function GET(req: Request) {
   });
 
 
-  return NextResponse.json(posts, { status: 200 })
+  return NextResponse.json({ posts }, { status: 200 })
 }
 
   

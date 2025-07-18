@@ -1,4 +1,5 @@
 // app/posts/[id]/page.tsx
+
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -10,9 +11,15 @@ type PostDetailPageProps = {
 }
 
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
+  const postId = Number(params.id);
+
+  if (!params.id || isNaN(postId)) {
+    notFound();
+  }
+
   const post = await prisma.post.findUnique({
     where: {
-      id: Number(params.id),
+      id: postId,
     },
     include: {
       memo: {

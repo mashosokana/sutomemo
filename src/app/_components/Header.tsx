@@ -1,7 +1,6 @@
 //aec/app/_components/Header.tsx
 'use client'
 
-import { useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession"
@@ -16,30 +15,26 @@ export default function Header() {
     router.push("/login")
   }
 
-  useEffect(() => {
-    console.log("現在のセッション:", session);
-  }, [session]);
-  
 
   return (
-    <header className="bg-gray-100 p-4 flex justify-between items-center shadow">
-      <Link href="/" className="text-lg font-bold text-blue-600">
-        SutoMemo
+    <header className="flex justify-between items-center w-full max-w-md px-4 py-3 bg-gray-900 text-white">
+      <Link href="/" className="text-lg font-bold">
+        SutoMemo <span className="text-sm">(ストめも)</span>
       </Link>
 
       {isLoading ? (
-        <div className="text-gray-500">読み込み中...</div>
+        <span className="text-gray-400 text-sm">読み込み中...</span>
       ) : session ? (
-            <>
-              <Link href="/dashboard" className="hover:underline text-gray-700">
+        <div className="flex gap-3 items-center">
+              <Link href="/dashboard" className="hover:underline text-sm">
                 ダッシュボード
               </Link>
-              <button onClick={handleLogout} className="text-red-500 hover:underline">
+              <button onClick={handleLogout} className="text-gray-200 hover:underline text-sm">
                 ログアウト
               </button>
-            </>
+        </div>
           ) : (
-            <Link href="/login" className="text-blue-500 hover:underline">
+            <Link href="/login" className="bg-gray-200 text-gray-900 px-3 py-1 rounded text-sm hover:bg-gray-300">
               ログイン
             </Link>
           )}

@@ -6,6 +6,9 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function PUT(req: Request, { params }: { params: { id: string } })  {
   const postId = Number(params.id);
+  if (isNaN(postId)) {
+    return NextResponse.json({ error: "ふせいなIDです"}, {status: 400});
+  }
 
   const token = req.headers.get("Authorization")?.replace("Bearer ", "");
   if (!token){
@@ -73,11 +76,14 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     },
   });
 
-  return NextResponse.json(updatedPost) 
+  return NextResponse.json({ post: updatedPost }, {status: 200 }); 
 } 
 
 export async function GET(req: NextResponse, { params }: { params: { id: string}} ) {
   const postId = Number(params.id);
+  if (isNaN(postId)) {
+    return NextResponse.json({ error: "不正なIDです" }, {status: 400 });
+  }
 
   const token = req.headers.get("Authorization")?.replace("Bearer ", "");
   if (!token) {
@@ -106,5 +112,5 @@ export async function GET(req: NextResponse, { params }: { params: { id: string}
   if (post.userId !== user.id) {
     return NextResponse.json({ error: "この投稿にアクセスする権限がありません" },{ status: 403 });
   }
-  return NextResponse.json({ post });
+  return NextResponse.json({ post }, { status: 200 });
 }
