@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import ImageSelector from "./ImageSelector";
 
 type PostDetailPageProps = {
   params: {
@@ -21,9 +22,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     where: {
       id: postId,
     },
-    include: {
+    include:{
       memo: {
-        select: {
+        select:{
           answerWhy: true,
           answerWhat: true,
           answerNext: true,
@@ -32,10 +33,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     },
   });
 
-  if(!post) {
-    notFound()
+  if (!post) {
+    notFound();
   }
-
+  
   return (
     <main className="max-w-xl mx-auto p-6 space-y-4">
       <h1 className="text-3xl font-bold text-center mb-6">{post.caption}</h1>
@@ -51,12 +52,13 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         </div>
       )}
 
+      <ImageSelector />
+
       <Link href="/dashboard">
         <button className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
           ← ダッシュボードに戻る
         </button>
       </Link>
-
     </main>
-  )
+  );
 }
