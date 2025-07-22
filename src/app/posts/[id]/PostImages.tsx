@@ -1,51 +1,61 @@
 //src/app/post/[id]/PostImages.tsx
 
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
-import Image from "next/image"
+import { useState } from "react";
+import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
+import Image from "next/image";
 
 type Props = {
-  imageKeys: string[]
-}
+  postId: string;
+  images: { id: number; url: string }[];
+  onDelete?: (imageId: number) => void;
+};
 
-export default function PostImages({ imageKeys }: Props) {
-  const [imageUrls, setImageUrls] = useState<string[]>([])
+export default function PostImages({ postId, images, onDelete }: Props) {
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const { token } = useSupabaseSession();
 
-  useEffect(() => {
-    const fetchUrls = async () => {
-      const Urls = await Promise.all(
-        imageKeys.map(async (key) => {
-          const { data } = await supabase
-            .storage
-            .from("post-images")
-            .getPublicUrl(key)
+  const handleDelete = async (imageId: number) => {
+    if (!confirm("この画像を削除しますか？")) return;
 
-          return data?.publicUrl ?? null
-        })
-      )
-      setImageUrls(Urls.filter((url): url is string => url !== null))
+    setDeleting(imageId);
+    try {
+      const res = await fetch(`/api/posts/${postId}/images/${imageId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: token ?? "", 
+        },
+      });
+      if (!res.ok) {
+        alert("削除に失敗しました");
+        return;
+      }
+      onDelete?.(imageId); 
+    } finally {
+      setDeleting(null);
     }
+  };
 
-    if (imageKeys.length > 0) {
-      fetchUrls();
-    }
-  },[imageKeys])
-
-  if (imageUrls.length === 0) return null;
+  if (images.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-4 mt-4">
-      {imageUrls.map((url, idx) => (
-        <Image
-          key={idx}
-          src={url}
-          alt={`投稿画像 ${idx + 1}`}
-          width={400}
-          height={400}
-          className="rounded border"
-        />
+    <div className="flex gap-4 flex-wrap">
+      {images.map((img) => (
+        <div key={img.id} className="relative w-40 h-40">
+          <Image
+            src={img.url}
+            alt=""
+            className="object-cover w-full h-full rounded"
+          />
+          <button
+            onClick={() => handleDelete(img.id)}
+            disabled={deleting === img.id}
+            className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded"
+          >
+            {deleting === img.id ? "削除中..." : "削除"}
+          </button>
+        </div>
       ))}
     </div>
   );
