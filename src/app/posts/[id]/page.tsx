@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import ImageSelector from "./ImageSelector";
 import PostImages from "./PostImages";
+import { supabase } from "@/lib/supabase";
 
 type PostDetailPageProps = {
   params: {
@@ -39,6 +40,14 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     notFound();
   }
 
+  const imagesWithUrl = post.images.map((img) => {
+    const { data } = supabase
+      .storage
+      .from("post-images")
+      .getPublicUrl(img.imageKey);
+    return { id: img.id, url: data?.publicUrl ?? "" };
+  });
+
   return (
     <main className="max-w-xl mx-auto p-6 space-y-4">
       <h1 className="text-3xl font-bold text-center mb-6">{post.caption}</h1>
@@ -54,7 +63,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
         </div>
       )}
       
-      <PostImages imageKeys={post.images.map(img => img.imageKey)} />
+      <PostImages postId={String(post.id)} images={imagesWithUrl ?? []} />
       <ImageSelector postId={postId} />
 
       <Link href="/dashboard">

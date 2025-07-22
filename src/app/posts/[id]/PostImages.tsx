@@ -37,15 +37,15 @@ export default function PostImages({ postId, images, onDelete }: Props) {
     }
   };
 
-  if (images.length === 0) return null;
-
   return (
     <div className="flex gap-4 flex-wrap">
       {images.map((img) => (
         <div key={img.id} className="relative w-40 h-40">
           <Image
             src={img.url}
-            alt=""
+            alt="投稿画像"
+            width={160}
+            height={160}
             className="object-cover w-full h-full rounded"
           />
           <button

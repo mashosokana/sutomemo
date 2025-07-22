@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 
 const ParamsSchema = z.object({
-  id: z.string().uuid(),
-  imageId: z.string().uuid(),
+  id: z.string().regex(/^\d+$/).transform((val) => parseInt(val, 10)),
+  imageId: z.string().regex(/^\d+$/).transform((val) => parseInt(val, 10)),
 });
 
 export async function DELETE(
@@ -21,8 +21,6 @@ export async function DELETE(
     }
     const { imageId } = parsed.data;
 
-    const imageIdNum = parseInt(imageId,10);
-
     const token = req.headers.get('Authorization') ?? '';
 
     const { data: userData, error: authError } = await supabase.auth.getUser(token);
@@ -32,7 +30,7 @@ export async function DELETE(
     const userId = userData.user.id;
 
     const image = await prisma.image.findUnique({
-      where: { id: imageIdNum },
+      where: { id: imageId },
       include: { post: true },
     });
     if (!image) {
@@ -50,7 +48,7 @@ export async function DELETE(
 
       if (storageError) throw new Error('Storage delete failed');
 
-      await tx.image.delete({ where: { id: imageIdNum } });
+      await tx.image.delete({ where: { id: imageId } });
     });
 
     return NextResponse.json({ success: true });
