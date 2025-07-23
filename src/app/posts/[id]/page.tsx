@@ -1,32 +1,25 @@
-// app/posts/[id]/page.tsx
-
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import ImageSelector from "./ImageSelector";
-import PostImages from "./PostImages";
+import PostImageManager from "./PostImageManager";
 import { supabase } from "@/lib/supabase";
 
 type PostDetailPageProps = {
   params: {
-    id: string
-  }
-}
+    id: string;
+  };
+};
 
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
   const postId = Number(params.id);
-
   if (!params.id || isNaN(postId)) {
     notFound();
   }
 
   const post = await prisma.post.findUnique({
-    where: {
-      id: postId,
-    },
-    include:{
+    where: { id: postId },
+    include: {
       memo: {
-        select:{
+        select: {
           answerWhy: true,
           answerWhat: true,
           answerNext: true,
@@ -41,8 +34,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
   }
 
   const imagesWithUrl = post.images.map((img) => {
-    const { data } = supabase
-      .storage
+    const { data } = supabase.storage
       .from("post-images")
       .getPublicUrl(img.imageKey);
     return { id: img.id, url: data?.publicUrl ?? "" };
@@ -62,15 +54,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
           <p><strong>次に:</strong> {post.memo.answerNext}</p>
         </div>
       )}
-      
-      <PostImages postId={String(post.id)} images={imagesWithUrl ?? []} />
-      <ImageSelector postId={postId} />
 
-      <Link href="/dashboard">
-        <button className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-          ← ダッシュボードに戻る
-        </button>
-      </Link>
+      {/* 画像管理（表示＋アップロード＋削除）を統合 */}
+      <PostImageManager postId={postId} initialImages={imagesWithUrl ?? []} />
     </main>
   );
 }
