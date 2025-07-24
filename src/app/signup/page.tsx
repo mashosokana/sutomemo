@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react';
-import { supabase } from '@/utils/supabase'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 export default function SignUpPage() {
@@ -19,13 +19,16 @@ export default function SignUpPage() {
     setErrorMessage('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email, 
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/login`,
+        emailRedirectTo: `${window.location.origin}/signup-success`,
       },
     })
+
+
+    console.log("SignUp Result:", { data, error })
 
     setLoading(false);
 
@@ -76,7 +79,7 @@ export default function SignUpPage() {
           />
         </div>
           <p className='text-red-500 text-sm text-center'>
-            {errorMessage}
+            {errorMessage && `エラー: ${errorMessage}`}
           </p>
 
         <div>

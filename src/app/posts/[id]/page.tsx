@@ -1,54 +1,64 @@
 // app/posts/[id]/page.tsx
-"use client"
 
-import useSWR from 'swr'
-import { fetcher } from '@/utils/fetcher';
-import { useRouter } from "next/navigation";
-import MemoForm from '@/app/components/MemoForm';
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import ImageSelector from "./ImageSelector";
 
-export default function PostDetailPage({ params }: { params: { id: string} }) {
-const router = useRouter()
+type PostDetailPageProps = {
+  params: {
+    id: string
+  }
+}
 
-const {
-  data: post,
-  error,
-  isLoading,
-  mutate,
-} = useSWR(`/api/posts/${params.id}`, fetcher)
+export default async function PostDetailPage({ params }: PostDetailPageProps) {
+  const postId = Number(params.id);
 
-  const handleDelate = async () => {
-    const token = localStorage.getItem("token");
-    console.log("トークン:", token);
-    
-    const res = await fetch(`/api/posts/${params.id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: "Bearer " + token,
+  if (!params.id || isNaN(postId)) {
+    notFound();
+  }
+
+  const post = await prisma.post.findUnique({
+    where: {
+      id: postId,
+    },
+    include:{
+      memo: {
+        select:{
+          answerWhy: true,
+          answerWhat: true,
+          answerNext: true,
+        },
       },
-    });
+    },
+  });
 
-    if (res.ok) {
-      alert("削除しました");
-      router.push("/dashboard");
-    }else {
-      const error = await res.json();
-      alert("削除失敗: " + (error?.error ?? "不明なエラー"));
-    }
-  };
+  if (!post) {
+    notFound();
+  }
+  
+  return (
+    <main className="max-w-xl mx-auto p-6 space-y-4">
+      <h1 className="text-3xl font-bold text-center mb-6">{post.caption}</h1>
+      <p className="text-sm text-gray-500">
+        投稿日: {new Date(post.createdAt).toLocaleDateString()}
+      </p>
 
-  if (isLoading) return <p className='p-4'>読み込み中</p>
-  if (error) return <p className='p-4 text-red-600'>取得失敗</p>
-  if (!post) return <p className='p-4'>存在しない投稿です</p>
+      {post.memo && (
+        <div className="mt-4 space-y-2">
+          <p><strong>なぜ:</strong> {post.memo.answerWhy}</p>
+          <p><strong>何が:</strong> {post.memo.answerWhat}</p>
+          <p><strong>次に:</strong> {post.memo.answerNext}</p>
+        </div>
+      )}
 
- return (
-  <div className='font-sans font-sans p-4 space-y-4'>
-    <h1 className="font-sans font-sans text-2xl">{post.caption}</h1>
+      <ImageSelector />
 
-    <MemoForm postId={post.id} memo={post.memo} onSaved={mutate} />
-
-    <button onClick={handleDelate} className='font-sans text-red-500'>
-      削除
-      </button>
-  </div>
- ); 
+      <Link href="/dashboard">
+        <button className="mt-4 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+          ← ダッシュボードに戻る
+        </button>
+      </Link>
+    </main>
+  );
 }
