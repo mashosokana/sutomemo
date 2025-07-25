@@ -37,26 +37,26 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
     const { data } = supabase.storage
       .from("post-images")
       .getPublicUrl(img.imageKey);
-    return { id: img.id, url: data?.publicUrl ?? "" };
+      return { id: img.id, key: img.imageKey, url: data?.publicUrl ?? "" };
   });
 
   return (
-    <main className="max-w-xl mx-auto p-6 space-y-4">
-      <h1 className="text-3xl font-bold text-center mb-6">{post.caption}</h1>
-      <p className="text-sm text-gray-500">
+    <main className="flex flex-col items-center min-h-screen p-4 bg-white text-black">
+      <p className="text-gray-600 text-sm mb-4">
         投稿日: {new Date(post.createdAt).toLocaleDateString()}
       </p>
 
-      {post.memo && (
-        <div className="mt-4 space-y-2">
-          <p><strong>なぜ:</strong> {post.memo.answerWhy}</p>
-          <p><strong>何が:</strong> {post.memo.answerWhat}</p>
-          <p><strong>次に:</strong> {post.memo.answerNext}</p>
-        </div>
-      )}
+      <PostImageManager
+        postId={postId}
+        initialImages={imagesWithUrl}
+        caption={post.caption} 
+        memo={{
+          answerWhy: post.memo?.answerWhy ?? undefined,
+          answerWhat: post.memo?.answerWhat ?? undefined,
+          answerNext: post.memo?.answerNext ?? undefined,
+        }}
+      />
 
-      {/* 画像管理（表示＋アップロード＋削除）を統合 */}
-      <PostImageManager postId={postId} initialImages={imagesWithUrl ?? []} />
     </main>
   );
 }
