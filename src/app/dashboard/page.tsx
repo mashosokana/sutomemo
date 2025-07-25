@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
 import DashboardPostCard from "./DashboardPostCard";
-import PostImageManager from "../posts/[id]/PostImageManager";
 
 type MemoType = {
   answerWhy: string;

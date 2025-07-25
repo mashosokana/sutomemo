@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { v4 as uuidv4 } from "uuid";
+import { supabase } from "@/lib/supabase";
 
 function parsePostId(id: string) {
   const postId = Number(id);
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .from("post-images")
       .upload(filePath, buffer, {
         cacheControl: "3600",
-        upsert: false,
+        upsert: false,  // 重複時はエラーを返す
         contentType: imageFile.type,
       });
 
@@ -58,7 +59,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: { postId, imageKey: filePath },
     });
 
-    return NextResponse.json({ image }, { status: 201 });
+    const { data: urlData } = supabase
+      .storage
+      .from("post-images")
+      .getPublicUrl(filePath);
+
+    return NextResponse.json(
+      { image: {id: image.id, imageKey: filePath, url: urlData?.publicUrl ?? "" } }, 
+      { status: 201 }
+    );
   } catch (err) {
     console.error("POST /api/posts/[id]/image error:", err);
     return NextResponse.json({ error: "画像の保存に失敗しました" }, { status: 500 });
@@ -90,13 +99,10 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Image not found or unauthorized" }, { status: 404 });
     }
 
-    const { error: storageError } = await supabaseAdmin
+    await supabaseAdmin
       .storage
       .from("post-images")
       .remove([imageKey]);
-    if (storageError) {
-      console.warn("Supabase storage delete failed:", storageError.message);
-    }
 
     await prisma.image.delete({ where: { id: image.id } });
 

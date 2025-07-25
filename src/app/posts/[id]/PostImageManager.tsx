@@ -3,11 +3,11 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
 import Image from "next/image";
-import Link from "next/link";
 
 type ImageData = { 
   id: number; 
   key: string;
+  imageKey?: string;
   url: string; 
 };
 
@@ -23,20 +23,33 @@ type Props = {
 };
 
 export default function PostImageManager({ postId, initialImages,caption, memo }: Props) {
-  const [localImages, setLocalImages] = useState<ImageData[]>(initialImages);
+  const [localImages, setLocalImages] = useState<ImageData[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const { token } = useSupabaseSession();
 
+  const buildPublicUrl = (imageKey: string) => {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    return `${base}/storage/v1/object/public/post-images/${imageKey}?t=${Date.now()}`;
+  };
+
   useEffect(() => {
-    setLocalImages(initialImages);
+    const withUrls = initialImages.map(img => {
+      const key = img.key ?? img.imageKey ?? "";
+      return {
+        id: img.id,
+        key,
+        url: buildPublicUrl(key),
+      };
+    });
+    setLocalImages(withUrls);
   }, [initialImages]);
 
   const handleDelete = async () => {
     if (!localImages.length || !confirm("この画像を削除しますか？")) return;
 
     const targetImage = localImages[0];
-    setDeleting(targetImage.key);
+    setDeleting(targetImage.key ?? "");
 
     try {
       const res = await fetch(`/api/posts/${postId}/images`, {
@@ -82,9 +95,15 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
       }
 
       const { image } = await res.json();
-      const imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/post-images/${image.imageKey}`;
 
-      setLocalImages([{ id: image.id, key: image.imageKey, url: imageUrl }]);
+      if (!image?.imageKey) {
+        console.error("アップロード成功しましたが imageKey がありません", image);
+        return;
+      }
+
+      const url = buildPublicUrl(image.imageKey);
+
+      setLocalImages([{ id: image.id, key: image.imageKey, url }]);
     } finally {
       setUploading(false);
     }
@@ -131,17 +150,18 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
       {uploading && <p className="text-blue-500 text-xs">アップロード中...</p>}
 
       <div className="flex gap-4 mt-4">
-        <Link href="/dashboard">
-          <button className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-            ダッシュボードに戻る
-          </button>
-        </Link>
+          <button 
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          onClick={() => alert("画像が保存されました")}
+          >
+            画像を保存
+        </button>
         <button
           onClick={handleDelete}
           disabled={!localImages.length || deleting !== null}
           className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
         >
-          {deleting ? "削除中..." : "削除"}
+          {deleting ? "削除中..." : "画像を削除"}
         </button>
       </div>
     </div>
