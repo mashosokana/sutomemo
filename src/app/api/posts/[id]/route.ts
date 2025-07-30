@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+const SIGNED_URL_EXPIRY = 60 * 60;
+
 function parsePostId(params: { id: string }) {
   const postId = Number(params.id);
   if (isNaN(postId)) {
@@ -33,7 +35,32 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
   }
 
-  return NextResponse.json({ post }, { status: 200 });
+  const imagesWithSignedUrls = await Promise.all(
+    post.images.map(async (img) => {
+      const { data, error } = await supabaseAdmin.storage
+        .from("post-images")
+        .createSignedUrl(img.imageKey, SIGNED_URL_EXPIRY);
+
+      if (error) {
+        console.warn(`Failed to create signed URL for ${img.imageKey}`, error.message);
+      } 
+
+      return {
+        ...img,
+        signedUrl: data?.signedUrl ?? null,
+      };
+    })
+  );
+
+  return NextResponse.json(
+    {
+      post: {
+        ...post,
+        images: imagesWithSignedUrls ?? [],
+      },
+    },
+    { status: 200 }
+  );
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {

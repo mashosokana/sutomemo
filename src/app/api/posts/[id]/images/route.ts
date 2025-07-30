@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { v4 as uuidv4 } from "uuid";
-import { supabase } from "@/lib/supabase";
+
+const SIGNED_URL_EXPIRY = 60 * 60;
 
 function parsePostId(id: string) {
   const postId = Number(id);
@@ -59,13 +60,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: { postId, imageKey: filePath },
     });
 
-    const { data: urlData } = supabase
+    const { data: signedData, error: signedError } = await supabaseAdmin
       .storage
       .from("post-images")
-      .getPublicUrl(filePath);
+      .createSignedUrl(filePath, SIGNED_URL_EXPIRY);
+
+    if (signedError) {
+      console.warn("Failed to create signed URL:", signedError.message);
+    }
 
     return NextResponse.json(
-      { image: {id: image.id, imageKey: filePath, url: urlData?.publicUrl ?? "" } }, 
+      { 
+        image: {
+          id: image.id, 
+          imageKey: filePath, 
+          signedUrl: signedData?.signedUrl ?? null,
+        }, 
+      }, 
       { status: 201 }
     );
   } catch (err) {

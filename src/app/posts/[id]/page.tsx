@@ -1,44 +1,44 @@
-import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
-import PostImageManager from "./PostImageManager";
-import { supabase } from "@/lib/supabase";
+"use client";
 
-type PostDetailPageProps = {
-  params: {
-    id: string;
-  };
+import { useEffect, useState } from "react";
+import PostImageManager from "./PostImageManager";
+import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
+import { PostDetail } from "../../../../types/post";
+
+type Props = {
+  params: { id: string };
 };
 
-export default async function PostDetailPage({ params }: PostDetailPageProps) {
+export default function PostDetailPage({ params }: Props) {
+  const { token } = useSupabaseSession();
+  const [post, setPost] = useState<PostDetail | null>(null);
   const postId = Number(params.id);
-  if (!params.id || isNaN(postId)) {
-    notFound();
-  }
 
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: {
-      memo: {
-        select: {
-          answerWhy: true,
-          answerWhat: true,
-          answerNext: true,
-        },
-      },
-      images: true,
-    },
-  });
+  useEffect(() => {
+    if (!token || isNaN(postId)) return;
+
+    const fetchPost = async () => {
+      const res = await fetch(`/api/posts/${postId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setPost(null);
+        return;
+      }
+      const data = await res.json();
+      setPost(data.post as PostDetail);
+    };
+
+    fetchPost();
+  }, [token, postId]);
 
   if (!post) {
-    notFound();
+    return (
+      <p className="text-center mt-8 text-gray-500">
+        読み込み中またはデータがありません。
+      </p>
+    );
   }
-
-  const imagesWithUrl = post.images.map((img) => {
-    const { data } = supabase.storage
-      .from("post-images")
-      .getPublicUrl(img.imageKey);
-      return { id: img.id, key: img.imageKey, url: data?.publicUrl ?? "" };
-  });
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 bg-white text-black">
@@ -48,15 +48,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
       <PostImageManager
         postId={postId}
-        initialImages={imagesWithUrl}
-        caption={post.caption} 
-        memo={{
-          answerWhy: post.memo?.answerWhy ?? undefined,
-          answerWhat: post.memo?.answerWhat ?? undefined,
-          answerNext: post.memo?.answerNext ?? undefined,
-        }}
+        initialImages={post.images ?? []}
+        caption={post.caption}
+        memo={post.memo}
       />
-
     </main>
   );
 }

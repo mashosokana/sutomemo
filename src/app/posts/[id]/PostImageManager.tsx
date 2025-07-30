@@ -3,45 +3,26 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
 import Image from "next/image";
-
-type ImageData = { 
-  id: number; 
-  key: string;
-  imageKey?: string;
-  url: string; 
-};
+import { PostImage, PostMemo } from "../../../../types/post"; 
 
 type Props = {
   postId: number;
-  initialImages: ImageData[];
-  caption?: string
-  memo?: {
-    answerWhy?: string;
-    answerWhat?: string;
-    answerNext?: string;
-  };
+  initialImages: PostImage[];
+  caption?: string;
+  memo?: PostMemo;
 };
 
-export default function PostImageManager({ postId, initialImages,caption, memo }: Props) {
-  const [localImages, setLocalImages] = useState<ImageData[]>([]);
+export default function PostImageManager({ postId, initialImages, caption, memo }: Props) {
+  const [localImages, setLocalImages] = useState<PostImage[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const { token } = useSupabaseSession();
 
-  const buildPublicUrl = (imageKey: string) => {
-    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    return `${base}/storage/v1/object/public/post-images/${imageKey}?t=${Date.now()}`;
-  };
-
   useEffect(() => {
-    const withUrls = initialImages.map(img => {
-      const key = img.key ?? img.imageKey ?? "";
-      return {
-        id: img.id,
-        key,
-        url: buildPublicUrl(key),
-      };
-    });
+    const withUrls = initialImages.map((img) => ({
+      ...img,
+      signedUrl: img.signedUrl ?? "",
+    }));
     setLocalImages(withUrls);
   }, [initialImages]);
 
@@ -49,23 +30,24 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
     if (!localImages.length || !confirm("この画像を削除しますか？")) return;
 
     const targetImage = localImages[0];
-    setDeleting(targetImage.key ?? "");
+    setDeleting(targetImage.imageKey);
 
     try {
       const res = await fetch(`/api/posts/${postId}/images`, {
         method: "DELETE",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token ?? ""}`,
         },
-        body: JSON.stringify({ imageKey: targetImage.key })
       });
 
       if (!res.ok) {
         alert("削除に失敗しました");
         return;
       }
-      setLocalImages([]);
+
+      const result: { images?: PostImage[] } = await res.json();
+      setLocalImages(result.images ?? []);
     } finally {
       setDeleting(null);
     }
@@ -83,10 +65,10 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
 
       const res = await fetch(`/api/posts/${postId}/images`, {
         method: "POST",
-        headers: { 
+        headers: {
           Authorization: `Bearer ${token ?? ""}`,
         },
-        body: formData
+        body: formData,
       });
 
       if (!res.ok) {
@@ -96,14 +78,12 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
 
       const { image } = await res.json();
 
-      if (!image?.imageKey) {
-        console.error("アップロード成功しましたが imageKey がありません", image);
+      if (!image?.signedUrl) {
+        console.error("アップロード成功しましたが URL がありません", image);
         return;
       }
 
-      const url = buildPublicUrl(image.imageKey);
-
-      setLocalImages([{ id: image.id, key: image.imageKey, url }]);
+      setLocalImages([image as PostImage]);
     } finally {
       setUploading(false);
     }
@@ -111,13 +91,14 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
 
   return (
     <div className="flex flex-col items-center max-w-xs mx-auto p-4 shadow space-y-4">
-      {localImages.length > 0 ? (
+      {localImages.length > 0 && localImages[0].signedUrl ? (
         <Image
-          src={localImages[0].url}
+          src={localImages[0].signedUrl}
           alt="投稿画像"
           width={240}
           height={240}
           className="object-contain rounded border"
+          priority
         />
       ) : (
         <div className="flex items-center justify-center w-[240px] h-[240px] bg-gray-100 text-gray-400 rounded border">
@@ -150,11 +131,11 @@ export default function PostImageManager({ postId, initialImages,caption, memo }
       {uploading && <p className="text-blue-500 text-xs">アップロード中...</p>}
 
       <div className="flex gap-4 mt-4">
-          <button 
+        <button
           className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
           onClick={() => alert("画像が保存されました")}
-          >
-            画像を保存
+        >
+          画像を保存
         </button>
         <button
           onClick={handleDelete}
