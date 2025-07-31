@@ -21,7 +21,12 @@ interface ScalableFabricImage extends FabricImage {
 interface ScalableTextbox extends Textbox {
   width: number;
   fontSize?: number;
-  editable?: boolean;
+  fontFamily?: string; // ← 追加
+  fill?: string;
+  originX?: string;
+  top?: number;
+  left?: number;
+  selectable?: boolean;
   getScaledHeight(): number;
   setCoords(): void;
 }
@@ -33,6 +38,7 @@ export default function EditImagePage() {
   const canvasRef = useRef<CanvasWithEl | null>(null);
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const imageRef = useRef<ScalableFabricImage | null>(null);
+  const textboxRef = useRef<ScalableTextbox | null>(null);
 
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [caption, setCaption] = useState<string>("");
@@ -76,10 +82,7 @@ export default function EditImagePage() {
 
     if (!img.width || !img.height) return;
 
-    const scale = Math.min(
-      canvasWidth / img.width,
-      canvasHeight / img.height
-    );
+    const scale = Math.min(canvasWidth / img.width, canvasHeight / img.height);
 
     img.scale(scale);
     img.set({
@@ -92,42 +95,31 @@ export default function EditImagePage() {
     canvas.requestRenderAll();
   };
 
-  const addTextsToCanvas = (
+  const addTextToCanvas = (
     canvas: CanvasWithEl,
-    texts: string[],
+    text: string,
     fontSize: number,
     fontFamily: string,
     fontColor: string
   ) => {
-    let currentTop = 20;
     const padding = 20;
-    const maxWidth = canvas.getWidth() - padding * 2;
+    const maxWidth = canvas.getWidth() - padding - 40;
+    
+    const textbox = new Textbox(text, {
+      fontSize,
+      fontFamily,
+      fill: fontColor,
+    }) as ScalableTextbox;
 
-    texts.forEach((text) => {
-      const textbox = new Textbox(text, {
-        left: padding,
-        top: currentTop,
-        fontSize,
-        fontFamily,
-        fill: fontColor,
-      }) as unknown as ScalableTextbox;
-
-      textbox.width = maxWidth;
-      textbox.editable = true;
-
-      canvas.add(textbox);
-
-      while (
-        textbox.getScaledHeight() + currentTop > canvas.getHeight() - padding &&
-        (textbox.fontSize ?? 12) > 10
-      ) {
-        textbox.fontSize = (textbox.fontSize ?? 12) - 2;
-        textbox.setCoords();
-      }
-
-      currentTop += textbox.getScaledHeight() + 20; 
-    });
-
+    textbox.width = canvas.getWidth() - 40;
+    textbox.left = canvas.getWidth() / 2;
+    textbox.top = 20;
+    textbox.originX = "center";
+    textbox.selectable = false;
+    textbox.width = maxWidth;
+    textboxRef.current = textbox;
+    canvas.add(textbox);
+    textbox.setCoords();
     canvas.requestRenderAll();
   };
 
@@ -138,13 +130,13 @@ export default function EditImagePage() {
 
     const resizeCanvas = () => {
       if (!canvasRef.current) return;
-      const maxWidth = Math.min(window.innerWidth * 0.8, 600); 
-      const maxHeight = 400;
-
-      canvasRef.current.setDimensions({ width: maxWidth, height: maxHeight });
+      const maxWidth = Math.min(window.innerWidth * 0.8, 340);
+      const maxHeight = maxWidth * (4 / 3);
+      canvas.setDimensions({ width: maxWidth, height: maxHeight });
       fitImageToCanvas();
     };
 
+    resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
     if (imageUrl) {
@@ -156,8 +148,11 @@ export default function EditImagePage() {
 
         fitImageToCanvas();
 
-        const texts = [caption, answerWhy, answerWhat, answerNext].filter(Boolean);
-        addTextsToCanvas(canvas, texts, fontSize, fontFamily, fontColor);
+        const combinedText = [caption, answerWhy, answerWhat, answerNext]
+          .filter(Boolean)
+          .join("\n\n");
+
+        addTextToCanvas(canvas, combinedText, fontSize, fontFamily, fontColor);
       });
     }
 
@@ -167,40 +162,17 @@ export default function EditImagePage() {
     };
   }, [imageUrl, caption, answerWhy, answerWhat, answerNext, fontSize, fontFamily, fontColor]);
 
-  const downloadImage = () => {
-    if (!canvasRef.current) return;
-    const dataURL = canvasRef.current.toDataURL({ format: "png", multiplier: 1 });
-    const link = document.createElement("a");
-    link.href = dataURL;
-    link.download = `post-${id}-memo.png`;
-    link.click();
-  };
+  const updateTextboxStyle = (updates: Partial<ScalableTextbox>) => {
+    const textbox = textboxRef.current;
+    const canvas = canvasRef.current;
+    if (!textbox || !canvas) return;
 
-  const handleFontSizeChange = (size: number) => {
-    setFontSize(size);
-    if (!canvasRef.current) return;
-    canvasRef.current.getObjects().forEach((obj) => {
-      if (obj instanceof Textbox) (obj as ScalableTextbox).fontSize = size;
-    });
-    canvasRef.current.requestRenderAll();
-  };
-
-  const handleFontFamilyChange = (family: string) => {
-    setFontFamily(family);
-    if (!canvasRef.current) return;
-    canvasRef.current.getObjects().forEach((obj) => {
-      if (obj instanceof Textbox) obj.set({ fontFamily: family });
-    });
-    canvasRef.current.requestRenderAll();
-  };
-
-  const handleFontColorChange = (color: string) => {
-    setFontColor(color);
-    if (!canvasRef.current) return;
-    canvasRef.current.getObjects().forEach((obj) => {
-      if (obj instanceof Textbox) obj.set({ fill: color });
-    });
-    canvasRef.current.requestRenderAll();
+    Object.assign(textbox, updates);
+    textbox.width = canvas.getWidth() - 40;
+    textbox.left = canvas.getWidth() / 2;
+    textbox.originX = "center";
+    textbox.setCoords();
+    canvas.requestRenderAll();
   };
 
   return (
@@ -215,7 +187,11 @@ export default function EditImagePage() {
             min="12"
             max="72"
             value={fontSize}
-            onChange={(e) => handleFontSizeChange(Number(e.target.value))}
+            onChange={(e) => {
+              const size = Number(e.target.value);
+              setFontSize(size);
+              updateTextboxStyle({ fontSize: size });
+            }}
           />
         </label>
 
@@ -223,7 +199,11 @@ export default function EditImagePage() {
           フォント:
           <select
             value={fontFamily}
-            onChange={(e) => handleFontFamilyChange(e.target.value)}
+            onChange={(e) => {
+              const family = e.target.value;
+              setFontFamily(family);
+              updateTextboxStyle({ fontFamily: family });
+            }}
             className="border rounded p-1"
           >
             <option value="Arial">Arial</option>
@@ -238,18 +218,29 @@ export default function EditImagePage() {
           <input
             type="color"
             value={fontColor}
-            onChange={(e) => handleFontColorChange(e.target.value)}
+            onChange={(e) => {
+              const color = e.target.value;
+              setFontColor(color);
+              updateTextboxStyle({ fill: color });
+            }}
           />
         </label>
       </div>
 
       <div className="flex justify-center mb-4">
-        <canvas ref={canvasEl} className="border" />
+        <canvas ref={canvasEl} className="border max-h-[640px]" />
       </div>
 
       <div className="flex justify-center">
         <button
-          onClick={downloadImage}
+          onClick={() => {
+            if (!canvasRef.current) return;
+            const dataURL = canvasRef.current.toDataURL({ format: "png", multiplier: 1 });
+            const link = document.createElement("a");
+            link.href = dataURL;
+            link.download = `post-${id}-memo.png`;
+            link.click();
+          }}
           className="px-6 py-2 bg-black text-white rounded hover:opacity-80"
         >
           完成画像をダウンロード
