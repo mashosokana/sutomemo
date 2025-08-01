@@ -13,6 +13,8 @@ interface CanvasWithEl extends Canvas {
 }
 
 interface ScalableFabricImage extends FabricImage {
+  left?: number;
+  top?: number;
   getScaledWidth(): number;
   getScaledHeight(): number;
   setCoords(): void;
@@ -20,15 +22,24 @@ interface ScalableFabricImage extends FabricImage {
 
 interface ScalableTextbox extends Textbox {
   width: number;
+  height: number;
   fontSize?: number;
-  fontFamily?: string; // ← 追加
+  fontFamily?: string;
   fill?: string;
+  backgroundColor?: string;
   originX?: string;
+  originY?: string;
   top?: number;
   left?: number;
   selectable?: boolean;
+  editable?: boolean;
+  hasControls?: boolean;
+  textAlign?: string;
+  lineHeight?: number;
   getScaledHeight(): number;
   setCoords(): void;
+  calcTextHeight(): number;
+  on(eventName: string, handler: (e: unknown) => void): void;
 }
 
 export default function EditImagePage() {
@@ -49,6 +60,9 @@ export default function EditImagePage() {
   const [fontSize, setFontSize] = useState(24);
   const [fontFamily, setFontFamily] = useState("Arial");
   const [fontColor, setFontColor] = useState("#000000");
+  const [lineHeight, setLineHeight] = useState(1.2);
+  const [bgColor, setBgColor] = useState("transparent");
+  const [showControls, setShowControls] = useState(false);
 
   useEffect(() => {
     const fetchImageAndMemo = async () => {
@@ -97,31 +111,44 @@ export default function EditImagePage() {
 
   const addTextToCanvas = (
     canvas: CanvasWithEl,
+    image: ScalableFabricImage,
     text: string,
     fontSize: number,
     fontFamily: string,
-    fontColor: string
+    fontColor: string,
+    backgroundColor: string,
+    lineHeight: number
   ) => {
-    const padding = 20;
-    const maxWidth = canvas.getWidth() - padding - 40;
-    
     const textbox = new Textbox(text, {
       fontSize,
       fontFamily,
       fill: fontColor,
     }) as ScalableTextbox;
-
-    textbox.width = canvas.getWidth() - 40;
-    textbox.left = canvas.getWidth() / 2;
-    textbox.top = 20;
+  
+    textbox.backgroundColor = backgroundColor; // ← ✅ ここで後から設定
+    textbox.editable = true;
+    textbox.selectable = true;
+    textbox.textAlign = "center";
+    textbox.hasControls = false;
+    textbox.lineHeight = lineHeight;
+  
+    const boxWidth = canvas.getWidth() * 0.8;
+    textbox.width = boxWidth;
+    textbox.height = textbox.calcTextHeight(); // 高さをテキスト内容に応じて計算
+    textbox.left = image.left!;
+    textbox.top = image.top!;
     textbox.originX = "center";
-    textbox.selectable = false;
-    textbox.width = maxWidth;
+    textbox.originY = "center";
+  
+    textbox.on("selected", () => setShowControls(true));
+    textbox.on("deselected", () => setShowControls(false));
+  
     textboxRef.current = textbox;
     canvas.add(textbox);
     textbox.setCoords();
     canvas.requestRenderAll();
   };
+  
 
   useEffect(() => {
     if (!canvasEl.current) return;
@@ -133,7 +160,17 @@ export default function EditImagePage() {
       const maxWidth = Math.min(window.innerWidth * 0.8, 340);
       const maxHeight = maxWidth * (4 / 3);
       canvas.setDimensions({ width: maxWidth, height: maxHeight });
+
       fitImageToCanvas();
+
+      if (textboxRef.current) {
+        textboxRef.current.width = canvas.getWidth() * 0.8;
+        textboxRef.current.height = textboxRef.current.calcTextHeight();
+        textboxRef.current.left = canvas.getWidth() / 2;
+        textboxRef.current.originX = "center";
+        textboxRef.current.setCoords();
+        canvas.requestRenderAll();
+      }
     };
 
     resizeCanvas();
@@ -152,7 +189,16 @@ export default function EditImagePage() {
           .filter(Boolean)
           .join("\n\n");
 
-        addTextToCanvas(canvas, combinedText, fontSize, fontFamily, fontColor);
+        addTextToCanvas(
+          canvas,
+          image,
+          combinedText,
+          fontSize,
+          fontFamily,
+          fontColor,
+          bgColor,
+          lineHeight
+        );
       });
     }
 
@@ -160,7 +206,7 @@ export default function EditImagePage() {
       window.removeEventListener("resize", resizeCanvas);
       canvas.dispose();
     };
-  }, [imageUrl, caption, answerWhy, answerWhat, answerNext, fontSize, fontFamily, fontColor]);
+  }, [imageUrl, caption, answerWhy, answerWhat, answerNext, fontSize, fontFamily, fontColor, lineHeight, bgColor]);
 
   const updateTextboxStyle = (updates: Partial<ScalableTextbox>) => {
     const textbox = textboxRef.current;
@@ -168,7 +214,8 @@ export default function EditImagePage() {
     if (!textbox || !canvas) return;
 
     Object.assign(textbox, updates);
-    textbox.width = canvas.getWidth() - 40;
+    textbox.width = canvas.getWidth() * 0.8;
+    textbox.height = textbox.calcTextHeight();
     textbox.left = canvas.getWidth() / 2;
     textbox.originX = "center";
     textbox.setCoords();
@@ -179,53 +226,84 @@ export default function EditImagePage() {
     <main className="max-w-3xl mx-auto p-6 bg-white text-black min-h-screen">
       <h1 className="text-2xl font-bold mb-4">画像編集（メモ追加）</h1>
 
-      <div className="mb-4 flex items-center gap-6 flex-wrap">
-        <label className="flex items-center gap-2">
-          フォントサイズ:
-          <input
-            type="range"
-            min="12"
-            max="72"
-            value={fontSize}
-            onChange={(e) => {
-              const size = Number(e.target.value);
-              setFontSize(size);
-              updateTextboxStyle({ fontSize: size });
-            }}
-          />
-        </label>
+      {showControls && (
+        <div className="mb-4 flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2">
+            フォントサイズ:
+            <input
+              type="range"
+              min="12"
+              max="72"
+              value={fontSize}
+              onChange={(e) => {
+                const size = Number(e.target.value);
+                setFontSize(size);
+                updateTextboxStyle({ fontSize: size });
+              }}
+            />
+          </label>
 
-        <label className="flex items-center gap-2">
-          フォント:
-          <select
-            value={fontFamily}
-            onChange={(e) => {
-              const family = e.target.value;
-              setFontFamily(family);
-              updateTextboxStyle({ fontFamily: family });
-            }}
-            className="border rounded p-1"
-          >
-            <option value="Arial">Arial</option>
-            <option value="Times New Roman">Times</option>
-            <option value="Courier New">Courier</option>
-            <option value="monospace">Monospace</option>
-          </select>
-        </label>
+          <label className="flex items-center gap-2">
+            フォント:
+            <select
+              value={fontFamily}
+              onChange={(e) => {
+                const family = e.target.value;
+                setFontFamily(family);
+                updateTextboxStyle({ fontFamily: family });
+              }}
+              className="border rounded p-1"
+            >
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times</option>
+              <option value="Courier New">Courier</option>
+              <option value="monospace">Monospace</option>
+            </select>
+          </label>
 
-        <label className="flex items-center gap-2">
-          文字色:
-          <input
-            type="color"
-            value={fontColor}
-            onChange={(e) => {
-              const color = e.target.value;
-              setFontColor(color);
-              updateTextboxStyle({ fill: color });
-            }}
-          />
-        </label>
-      </div>
+          <label className="flex items-center gap-2">
+            文字色:
+            <input
+              type="color"
+              value={fontColor}
+              onChange={(e) => {
+                const color = e.target.value;
+                setFontColor(color);
+                updateTextboxStyle({ fill: color });
+              }}
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            背景色:
+            <input
+              type="color"
+              value={bgColor}
+              onChange={(e) => {
+                const color = e.target.value;
+                setBgColor(color);
+                updateTextboxStyle({ backgroundColor: color });
+              }}
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            行間:
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="0.1"
+              value={lineHeight}
+              onChange={(e) => {
+                const lh = Number(e.target.value);
+                setLineHeight(lh);
+                updateTextboxStyle({ lineHeight: lh });
+              }}
+            />
+          </label>
+        </div>
+      )}
 
       <div className="flex justify-center mb-4">
         <canvas ref={canvasEl} className="border max-h-[640px]" />
