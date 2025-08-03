@@ -1,42 +1,19 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
-import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
+import { useRef, useEffect, useState } from 'react';
 
-export default function EditImagePage() {
-  const { id } = useParams();
-  const { token } = useSupabaseSession();
+type Props = {
+  imageUrl: string;
+  initialText: string;
+};
+
+export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [text, setText] = useState("好きなテキストを入力");
-
+  const [text, setText] = useState(initialText);
   const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
   const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 400 });
 
-  useEffect(() => {
-    const fetchImageAndMemo = async () => {
-      if (!token) return;
-      const res = await fetch(`/api/posts/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const post = data.post;
-
-      setText(
-        [post.caption, post.memo?.answerWhy, post.memo?.answerWhat, post.memo?.answerNext]
-          .filter(Boolean)
-          .join("\n\n")
-      );
-      setImageUrl(post.images?.[0]?.signedUrl ?? null);
-    };
-
-    fetchImageAndMemo();
-  }, [id, token]);
-
-  // 再描画処理
+  // Canvas 描画
   useEffect(() => {
     if (!canvasRef.current || !imageUrl) return;
 
@@ -60,31 +37,20 @@ export default function EditImagePage() {
       ctx.clearRect(0, 0, newWidth, newHeight);
       ctx.drawImage(image, 0, 0, newWidth, newHeight);
 
-      // テキストボックスが画像外に出ないように制限
-      const clampedX = Math.min(
-        Math.max(0, dragOffset.x),
-        newWidth - textBoxSize.width
-      );
-      const clampedY = Math.min(
-        Math.max(0, dragOffset.y),
-        newHeight - textBoxSize.height
-      );
+      const clampedX = Math.min(Math.max(0, dragOffset.x), newWidth - textBoxSize.width);
+      const clampedY = Math.min(Math.max(0, dragOffset.y), newHeight - textBoxSize.height);
 
-      // 背景
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fillRect(clampedX, clampedY, textBoxSize.width, textBoxSize.height);
 
-      // テキスト
       ctx.font = "16px sans-serif";
       ctx.fillStyle = "#fff";
       ctx.textBaseline = "top";
       const lines = text.split("\n");
-
       lines.forEach((line, i) => {
         ctx.fillText(line, clampedX + 10, clampedY + 10 + i * 20);
       });
 
-      // state更新（外に出ていたら戻す）
       if (clampedX !== dragOffset.x || clampedY !== dragOffset.y) {
         setDragOffset({ x: clampedX, y: clampedY });
       }
@@ -95,7 +61,6 @@ export default function EditImagePage() {
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const startX = e.nativeEvent.offsetX;
     const startY = e.nativeEvent.offsetY;
-
     const initialX = dragOffset.x;
     const initialY = dragOffset.y;
 
@@ -121,31 +86,27 @@ export default function EditImagePage() {
   const handleDownload = () => {
     if (!canvasRef.current) return;
     const link = document.createElement("a");
-    link.download = `post-${id}-memo.png`;
+    link.download = "memo-image.png";
     link.href = canvasRef.current.toDataURL("image/png");
     link.click();
   };
 
   return (
-    <main className="max-w-md mx-auto p-4 text-black bg-white">
-      <h1 className="text-xl font-bold mb-4">画像編集（テキスト合成）</h1>
-
-      <div className="mb-4 flex flex-col items-center">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
-          className="border w-[300px] h-auto"
-        />
-      </div>
+    <div className="w-full max-w-md mx-auto space-y-4">
+      <canvas
+        ref={canvasRef}
+        onMouseDown={handleCanvasMouseDown}
+        className="border w-[300px] h-auto"
+      />
 
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
         rows={4}
-        className="w-full border p-2 rounded mb-4"
+        className="w-full border p-2 rounded"
       />
 
-      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2">
         <label className="flex items-center gap-2">
           幅:
           <input
@@ -180,6 +141,6 @@ export default function EditImagePage() {
           ダウンロード
         </button>
       </div>
-    </main>
+    </div>
   );
 }

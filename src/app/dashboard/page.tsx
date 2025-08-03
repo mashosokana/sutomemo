@@ -86,6 +86,7 @@ export default function DashboardPage() {
     if (!confirm("この投稿を削除しますか？")) return;
 
     try {
+      console.log("削除開始: ", postId);
       const res = await fetch(`/api/posts/${postId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -154,7 +155,7 @@ export default function DashboardPage() {
                   post.memo?.answerWhat ?? ""
                 }\n${post.memo?.answerNext ?? ""}`}
                 imageUrl={post.imageUrl}
-                onEdit={() => router.push(`/compose/input/${post.id}`)}
+                onEdit={() => router.push(`/posts/${post.id}`)}
                 onDelete={() => handleDelete(post.id)}
               />
             </li>

@@ -1,9 +1,7 @@
-//api/posts/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin"; // ✅ signed URL 生成は admin権限推奨
 
 export async function POST(req: Request) {
   const { user, error, status } = await verifyUser(req);
@@ -37,7 +35,7 @@ export async function POST(req: Request) {
     include: { memo: true },
   });
 
-  return NextResponse.json({ post }, { status: 201 }); // 作成時のみ 201
+  return NextResponse.json({ post }, { status: 201 });
 }
 
 export async function GET(req: Request) {
@@ -49,49 +47,43 @@ export async function GET(req: Request) {
   const posts = await prisma.post.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      caption: true,
-      createdAt: true,
-      memo: {
-        select: {
-          answerWhy: true,
-          answerWhat: true,
-          answerNext: true,
-        },
-      },
-      images: {
-        select: {
-          id: true,
-          imageKey: true,
-        },
-      },
+    include: {
+      memo: true,
+      images: true,
     },
   });
 
-  const postsWithImages = posts.map((post) => {
-    const images = post.images.map((img) => {
-      const { data } = supabase.storage
-        .from("post-images")
-        .getPublicUrl(img.imageKey);
+  const postsWithSignedUrls = await Promise.all(
+    posts.map(async (post) => {
+      const signedImages = await Promise.all(
+        post.images.map(async (img) => {
+          const { data: signed, error: signedError } = await supabaseAdmin
+            .storage
+            .from("post-images")
+            .createSignedUrl(img.imageKey, 60 * 60); // 1時間有効
+
+          if (signedError) {
+            console.warn(`Signed URL creation failed: ${signedError.message}`);
+          }
+
+          return {
+            id: img.id,
+            key: img.imageKey,
+            url: signed?.signedUrl ?? null,
+          };
+        })
+      );
+
       return {
-        id: img.id,
-        key: img.imageKey,
-        url: data?.publicUrl || "",
+        id: post.id,
+        caption: post.caption,
+        createdAt: post.createdAt,
+        memo: post.memo,
+        imageUrl: signedImages[0]?.url ?? null, // ダッシュボード表示用
+        images: signedImages,
       };
-    });
+    })
+  );
 
-    const firstImageUrl = images[0]?.url ?? null;
-
-    return {
-      id: post.id,
-      caption: post.caption,
-      createdAt: post.createdAt,
-      memo: post.memo,
-      imageUrl: firstImageUrl, 
-      images,                  
-    };
-  });
-
-  return NextResponse.json({ posts: postsWithImages }, { status: 200 });
+  return NextResponse.json({ posts: postsWithSignedUrls }, { status: 200 });
 }

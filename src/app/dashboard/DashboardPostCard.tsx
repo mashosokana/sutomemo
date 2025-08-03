@@ -18,6 +18,7 @@ export default function DashboardPostCard({ date, content, imageUrl, onEdit, onD
           alt={`投稿画像（${date}）`}
           width={150}
           height={150}
+          style={{ height: "auto" }}
           className="object-cover rounded-lg mr-4" 
         />
       ) : (
