@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabaseAdmin"; // ✅ signed URL 生成は admin権限推奨
+import { supabaseAdmin } from "@/lib/supabaseAdmin"; 
 
 export async function POST(req: Request) {
   const { user, error, status } = await verifyUser(req);

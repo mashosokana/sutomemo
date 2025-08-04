@@ -10,10 +10,12 @@ datasource db {
 }
 
 model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique 
+  password  String   
   role      Role     @default(user)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  id        String   @id @default(uuid()) @db.Uuid
   posts     Post[]
 }
 
@@ -43,7 +45,7 @@ model Memo {
 model Image {
   id          Int      @id @default(autoincrement())
   postId      Int
-  imageKey     String
+  imageKey    String
   generatedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
   post        Post     @relation(fields: [postId], references: [id])
