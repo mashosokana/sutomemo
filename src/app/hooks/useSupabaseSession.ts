@@ -14,6 +14,7 @@ export const useSupabaseSession = () => {
       const { data, error } = await supabase.auth.getSession()
       console.log("初回セッション取得:", data.session, error)
       setSession(data.session)
+      setToken(data.session?.access_token || null)
       setIsLoading(false)
     }
 

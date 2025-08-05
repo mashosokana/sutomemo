@@ -7,6 +7,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const SIGNED_URL_EXPIRY = 60 * 60;
 
+function isGuestUser(email?: string | null): boolean {
+  return email === process.env.GUEST_USER_EMAIL;
+}
+
 function parsePostId(params: { id: string }) {
   const postId = Number(params.id);
   if (isNaN(postId)) {
@@ -82,6 +86,26 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
   }
 
+  if (isGuestUser(user.email)) {
+    const guestPosts = await prisma.post.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    const firstPostId = guestPosts[0]?.id;
+
+    console.log("ゲスト編集チェック:", { guestPosts, editingId: existingPost.id })
+
+    if (!firstPostId || existingPost.id !== firstPostId) {
+      return NextResponse.json(
+        { error: "ゲストユーザーは最初の投稿のみ編集できます" },
+        { status: 403 }
+      );
+    }    
+  }
+
+
   const body = await req.json();
   const { caption, memo } = body;
   const { answerWhy, answerWhat, answerNext } = memo ?? {};
@@ -126,6 +150,14 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     if (!post) {
       return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
     }
+
+    if (isGuestUser(user.email)) {
+      return NextResponse.json(
+        { error: "ゲストユーザーは投稿を削除できません" },
+        { status: 403 }
+      );
+    }
+
 
     const imageKeys = post.images.map((img) => img.imageKey);
     if (imageKeys.length > 0) {

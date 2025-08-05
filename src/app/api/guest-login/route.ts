@@ -9,7 +9,7 @@ export async function POST() {
   const guestEmail = 'supabase994@gmail.com';
   const guestPassword = 'sisi4405';
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: guestEmail,
     password: guestPassword,
   });
@@ -19,5 +19,10 @@ export async function POST() {
     return NextResponse.json({ success: false, error: error.message }, { status: 401 });
   }
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  const access_token = data.session?.access_token || null;
+
+  return NextResponse.json(
+    { success: true,  token: access_token },
+    { status: 200 }
+  );
 }

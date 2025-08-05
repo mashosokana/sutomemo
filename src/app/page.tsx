@@ -1,15 +1,39 @@
 //src/app/page.tsx
+
+'use client'
+
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { supabase } from '@/lib/supabase';
 
 export default function Home() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: process.env.NEXT_PUBLIC_GUEST_EMAIL!,
+      password: process.env.NEXT_PUBLIC_GUEST_PASSWORD!,
+    });
+
+    if (error) {
+      alert(`ログイン失敗: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    router.replace('/dashboard');
+    router.refresh();
+    setLoading(false);
+  };
+
   return (
     <main className="bg-white ext-black w-[393px] px-6 space-y-6">
-      
-
-      {/* メインコンテンツ */}
       <div className="bg-white text-black w-full max-w-md px-6 py-6 space-y-6">
-        {/* キャッチコピー部分 */}
         <div className="flex justify-between items-start">
           <div className="flex-1 pr-4">
             <p className="text-red-500 font-bold text-[20px]">「何か残したい」けど</p>
@@ -23,7 +47,7 @@ export default function Home() {
               width={134}
               height={100}
               priority
-              className="w-[134px] h-auto" // ← これで警告なし
+              className="w-[134px] h-auto" 
             />
           </div>
         </div>
@@ -59,9 +83,13 @@ export default function Home() {
           <Link href="/signup">
             <button className="w-full bg-black text-white py-2 rounded mb-2 font-bold">ユーザー登録</button>
           </Link>
-          <Link href="/login">
-            <button className="w-full border border-black text-black py-2 rounded font-bold">お試しログイン</button>
-          </Link>
+          <button
+            onClick={handleGuestLogin}
+            className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
+            disabled={loading}
+          >
+            {loading ? 'ログイン中…' : 'お試しログイン'}
+          </button>
         </div>
 
         <section className="space-y-6 text-sm leading-relaxed text-gray-800">
@@ -130,9 +158,13 @@ export default function Home() {
           <Link href="/signup">
             <button className="w-full bg-black text-white py-2 rounded mb-2 font-bold">ユーザー登録</button>
           </Link>
-          <Link href="/login">
-            <button className="w-full border border-black text-black py-2 rounded font-bold">お試しログイン</button>
-          </Link>
+          <button
+            onClick={handleGuestLogin}
+            className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
+            disabled={loading}
+          >
+            {loading ? 'ログイン中…' : 'お試しログイン'}
+          </button>
         </div>
       </div>
     </main>

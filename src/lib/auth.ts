@@ -17,9 +17,13 @@ export async function verifyUser(req: Request) {
   }
 
   await prisma.user.upsert({
-    where: { id:user.id },
+    where: { id: user.id },
     update: {},
-    create: { id: user.id },
+    create: {
+      id: user.id,
+      email: user.email!,
+      password: "",
+    },
   });
 
   return { user, error: null, status: 200 };
