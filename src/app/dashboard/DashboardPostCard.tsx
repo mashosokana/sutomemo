@@ -10,38 +10,46 @@ type Props = {
 };
 
 export default function DashboardPostCard({ date, content, imageUrl, onEdit, onDelete}: Props) {
-  return(
-    <div className="flex items-start bg-white rounded-xl shadow p-4 mb-4">
-      {imageUrl ? (
-        <Image 
-          src={imageUrl} 
-          alt={`投稿画像（${date}）`}
-          width={150}
-          height={150}
-          style={{ height: "auto" }}
-          className="object-cover rounded-lg mr-4" 
-        />
-      ) : (
-        <div className="w-[150px] h-[150px] bg-gray-200 rounded-lg mr-4 flex items-center justify-center text-gray-400">
-          No image
-        </div>
-      )} 
+  return (
+    <div className="w-[345px] bg-white rounded-xl shadow p-3 mb-4 text-black">
+      <p className="text-sm font-bold mb-2">{date}</p>
 
-      <div className="flex-1">
-        <p className="text-sm text-gray-500 mb-1">{date}</p>
-        <p className="text-base text-gray-800 mb-4 whitespace-pre-wrap-">{content}</p>
-        <div className="flex gap-2">
-          <button onClick={onEdit} className="px-4 py-2 rounded-md bg-gray-500 hover:bg-gray-600">
-            編集
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
-          >
-            削除
-          </button>
+      <div className="flex items-start mb-2">
+        <div className="w-[60px] h-[60px] flex-shrink-0 bg-gray-100 rounded overflow-hidden relative mr-2">
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={`投稿画像（${date}）`}
+              fill
+              sizes="60px"
+              className="object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
+              No image
+            </div>
+          )}
         </div>
-      </div> 
+
+        <p className="text-sm text-gray-800 line-clamp-3">
+          {content}
+        </p>
+      </div>
+
+      <div className="relative h-[24px] mt-1 text-center">
+        <button
+          onClick={onEdit}
+          className="text-gray-600 hover:underline"
+        >
+          編集
+        </button>
+        <button
+          onClick={onDelete}
+          className="absolute right-0 text-red-500 hover:underline text-sm"
+        >
+          削除
+        </button>
+      </div>
     </div>
-  )
+  );
 }

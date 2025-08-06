@@ -1,5 +1,8 @@
 // src/app/hooks/useSupabaseSession.ts
 
+'use client'
+
+
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js"
@@ -10,23 +13,28 @@ export const useSupabaseSession = () => {
   const [isLoading, setIsLoading] = useState(true)
   
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data, error } = await supabase.auth.getSession()
-      console.log("初回セッション取得:", data.session, error)
-      setSession(data.session)
-      setToken(data.session?.access_token || null)
-      setIsLoading(false)
-    }
+    const timer = setTimeout(() => {
+      const fetchSession = async () => {
+        const { data, error } = await supabase.auth.getSession()
+        console.log("遅延後のセッション取得:", data.session, error)
+        setSession(data.session)
+        setToken(data.session?.access_token || null)
+        setIsLoading(false)
+      }
 
-    fetchSession()
+      fetchSession()
+    }, 100)
+
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("onAuthStateChange:", session)
       setSession(session)
       setToken(session?.access_token || null)
       setIsLoading(false)
     })
 
     return () => {
+      clearTimeout(timer)
       listener.subscription.unsubscribe()
     }
   }, [])

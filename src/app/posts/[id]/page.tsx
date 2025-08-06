@@ -7,7 +7,7 @@ import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { PostDetail, PostImage } from '../../../../types/post';
 
 export default function PostDetailPage({ params }: { params: { id: string } }) {
-  const { token } = useSupabaseSession();
+  const { token, session } = useSupabaseSession();
   const [post, setPost] = useState<PostDetail | null>(null);
   const [text, setText] = useState('');
   const [image, setImage] = useState<PostImage | null>(null);
@@ -16,9 +16,16 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
   const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 120 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
+  const [isGuest, setIsGuest] = useState(false);
+
+  useEffect(() => {
+    setIsGuest(session?.user?.email === 'guest@example.com');
+  }, [session]);
 
   useEffect(() => {
     if (!token || isNaN(postId)) return;
+
+    if (isGuest) return; 
 
     const fetchPost = async () => {
       const res = await fetch(`/api/posts/${postId}`, {
@@ -35,20 +42,33 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
         fetchedPost.memo?.answerNext,
       ].filter(Boolean).join('\n\n');
       setText(combinedText);
-      setImage(fetchedPost.images?.[fetchedPost.images.length - 1] ?? null); // 最新画像に変更
+      setImage(fetchedPost.images?.[fetchedPost.images.length - 1] ?? null);
     };
 
     fetchPost();
-  }, [token, postId]);
+  }, [token, postId, isGuest]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !token) return;
 
     const file = e.target.files[0];
+
+    if (isGuest) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImage({
+          id: -1,
+          signedUrl: reader.result as string,
+          imageKey: '',
+        });
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('image', file);
 
-    // 古い画像削除リクエストを送る（このあと必要に応じてAPI側でも実装）
     if (image?.imageKey) {
       await fetch(`/api/posts/${postId}/images`, {
         method: 'DELETE',
@@ -62,9 +82,7 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
 
     const res = await fetch(`/api/posts/${postId}/images`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
@@ -147,6 +165,10 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   };
+
+  if (isGuest) {
+    return <p className="text-center mt-8 text-gray-500">お試しユーザーでは保存されません（画面上のみ反映されます）</p>;
+  }
 
   if (!post) {
     return <p className="text-center mt-8 text-gray-500">読み込み中...</p>;

@@ -40,14 +40,14 @@ export default function Home() {
             <p className="text-sm mt-1 leading-relaxed text-[20px]">「どう書けばいいかわからない」</p>
           </div>
 
-          <div className="flex-shrink-0">
+          <div className="relative w-[134px] h-[100px] flex-shrink-0">
             <Image
               src="/icons/26465757.jpg"
               alt="悩んでいる人"
-              width={134}
-              height={100}
+              fill
               priority
-              className="w-[134px] h-auto" 
+              sizes="134px" 
+              className="object-contain"
             />
           </div>
         </div>
