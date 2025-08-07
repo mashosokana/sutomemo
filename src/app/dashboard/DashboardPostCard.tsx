@@ -7,9 +7,17 @@ type Props = {
   imageUrl?: string;
   onEdit: () => void;
   onDelete: () => void;
+  disabled?: boolean;
 };
 
-export default function DashboardPostCard({ date, content, imageUrl, onEdit, onDelete}: Props) {
+export default function DashboardPostCard({ 
+  date,
+  content, 
+  imageUrl, 
+  onEdit, 
+  onDelete, 
+  disabled = false,
+}: Props) {
   return (
     <div className="w-[345px] bg-white rounded-xl shadow p-3 mb-4 text-black">
       <p className="text-sm font-bold mb-2">{date}</p>
@@ -39,13 +47,19 @@ export default function DashboardPostCard({ date, content, imageUrl, onEdit, onD
       <div className="relative h-[24px] mt-1 text-center">
         <button
           onClick={onEdit}
-          className="text-gray-600 hover:underline"
+          disabled={disabled}
+          className={`text-gray-600 hover:underline ${
+            disabled ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
           編集
         </button>
         <button
           onClick={onDelete}
-          className="absolute right-0 text-red-500 hover:underline text-sm"
+          disabled={disabled}
+          className={`absolute right-0 text-red-500 hover:underline text-sm ${
+            disabled ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
         >
           削除
         </button>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 type MemoFormProps = {
   caption: string;
   answerWhy: string;
@@ -10,7 +12,7 @@ type MemoFormProps = {
   onWhatChange: (v: string) => void;
   onNextChange: (v: string) => void;
   onSubmit: () => void;
-  submitLabel: string; // "更新する" or "メモを保存する"
+  submitLabel: string; 
 };
 
 export default function MemoForm({
@@ -25,6 +27,16 @@ export default function MemoForm({
   onSubmit,
   submitLabel,
 }: MemoFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await onSubmit();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   return (
     <div className="space-y-4 bg-white text-black">
       <label className="block font-bold mb-1">やったこと学んだことをメモ</label>
@@ -33,6 +45,7 @@ export default function MemoForm({
         value={caption}
         onChange={(e) => onCaptionChange(e.target.value)}
         placeholder="タイトル"
+        disabled={isSubmitting}
       />
 
       <div>
@@ -43,6 +56,7 @@ export default function MemoForm({
           className="w-full border px-3 py-2 rounded text-black"
           value={answerWhy}
           onChange={(e) => onWhyChange(e.target.value)}
+          disabled={isSubmitting}
         />
       </div>
       <div>
@@ -53,6 +67,7 @@ export default function MemoForm({
           className="w-full border px-3 py-2 rounded text-black"
           value={answerWhat}
           onChange={(e) => onWhatChange(e.target.value)}
+          disabled={isSubmitting}
         />
       </div>
 
@@ -64,12 +79,14 @@ export default function MemoForm({
           className="w-full border px-3 py-2 rounded text-black"
           value={answerNext}
           onChange={(e) => onNextChange(e.target.value)}
+          disabled={isSubmitting}
         />
       </div>
 
       <button
-        onClick={onSubmit}
+        onClick={handleSubmit}
         className="w-full bg-black text-white py-3 rounded hover:opacity-80 transition"
+        disabled={isSubmitting}
       >
         {submitLabel}
       </button>

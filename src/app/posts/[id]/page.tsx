@@ -17,6 +17,8 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [isGuest, setIsGuest] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
 
   useEffect(() => {
     setIsGuest(session?.user?.email === 'guest@example.com');
@@ -51,51 +53,63 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !token) return;
 
-    const file = e.target.files[0];
+    setIsProcessing(true);
+    try {
+      const file = e.target.files[0];
 
-    if (isGuest) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage({
-          id: -1,
-          signedUrl: reader.result as string,
-          imageKey: '',
+      if (isGuest) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage({
+            id: -1,
+            signedUrl: reader.result as string,
+            imageKey: '',
+          });
+          setIsProcessing(false);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      if (image?.imageKey) {
+        await fetch(`/api/posts/${postId}/images`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ imageKey: image.imageKey }),
         });
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
+      }
 
-    const formData = new FormData();
-    formData.append('image', file);
-
-    if (image?.imageKey) {
-      await fetch(`/api/posts/${postId}/images`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ imageKey: image.imageKey }),
+      const res = await fetch(`/api/posts/${postId}/images`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
       });
+
+      const data = await res.json();
+      if (data.image) setImage(data.image);
+    } finally {
+      setIsProcessing(false); 
     }
-
-    const res = await fetch(`/api/posts/${postId}/images`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (data.image) setImage(data.image);
   };
 
   const handleDownload = () => {
     if (!canvasRef.current || !image?.signedUrl) return;
-    const link = document.createElement('a');
-    link.download = `post-${postId}-with-text.png`;
-    link.href = canvasRef.current.toDataURL('image/png');
-    link.click();
+
+    setIsProcessing(true);
+    try {
+      const link = document.createElement('a');
+      link.download = `post-${postId}-with-text.png`;
+      link.href = canvasRef.current.toDataURL('image/png');
+      link.click();
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   useEffect(() => {
@@ -200,6 +214,7 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
           onChange={(e) => setText(e.target.value)}
           rows={6}
           className="w-full border p-2 rounded"
+          disabled={isProcessing}
         />
 
         <div className="flex flex-col sm:flex-row gap-4">
@@ -213,6 +228,7 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
               onChange={(e) =>
                 setTextBoxSize((size) => ({ ...size, width: Number(e.target.value) }))
               }
+              disabled={isProcessing}
             />
           </label>
           <label className="flex items-center gap-2">
@@ -225,6 +241,7 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
               onChange={(e) =>
                 setTextBoxSize((size) => ({ ...size, height: Number(e.target.value) }))
               }
+              disabled={isProcessing}
             />
           </label>
         </div>
@@ -233,20 +250,24 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
           <button
             onClick={() => setFontSize('small')}
             className={`px-4 py-2 rounded ${fontSize === 'small' ? 'bg-blue-700 text-white' : 'bg-gray-200'}`}
+            disabled={isProcessing}
           >小</button>
           <button
             onClick={() => setFontSize('medium')}
             className={`px-4 py-2 rounded ${fontSize === 'medium' ? 'bg-blue-700 text-white' : 'bg-gray-200'}`}
+            disabled={isProcessing}
           >中</button>
           <button
             onClick={() => setFontSize('large')}
             className={`px-4 py-2 rounded ${fontSize === 'large' ? 'bg-blue-700 text-white' : 'bg-gray-200'}`}
+            disabled={isProcessing}
           >大</button>
         </div>
 
         <button
           onClick={handleDownload}
           className="bg-black text-white px-6 py-2 rounded hover:bg-gray-800"
+          disabled={isProcessing}
         >
           ダウンロード
         </button>

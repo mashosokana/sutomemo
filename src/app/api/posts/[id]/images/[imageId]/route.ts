@@ -1,8 +1,7 @@
 // /src/app/api/posts/[id]/images/[imageId]/route.ts
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyUser } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 
 const ParamsSchema = z.object({
@@ -15,30 +14,39 @@ export async function DELETE(
   { params }: { params: { id: string; imageId: string } }
 ) {
   try {
+    const token = req.headers.get('Authorization') ?? '';
+    const { data: userData, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !userData?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const parsed = ParamsSchema.safeParse(params);
     if (!parsed.success) {
       return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
     }
+
     const { id: postId, imageId } = parsed.data;
 
-    const { user, error: authError, status } = await verifyUser(req);
-    if (!user) {
-      return NextResponse.json({ error: authError }, {status });
-    }
-
-    const image = await prisma.image.findUnique({
-      where: { id: imageId },
-      include: { post: true },
+    const image = await prisma.image.findFirst({
+      where: {
+        id: imageId,
+        post: {
+          id: postId,
+          userId: userData.user.id,
+        },
+      },
+      include: {
+        post: true,
+      },
     });
+
     if (!image) {
-      return NextResponse.json({ error: 'Image not found' }, { status: 404 });
-    }
-    if (image.post.userId !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.json({ error: 'Image not found or forbidden' }, { status: 404 });
     }
 
     await prisma.$transaction(async (tx) => {
-      const { error: storageError } = await supabaseAdmin
+      const { error: storageError } = await supabase
         .storage
         .from('post-images')
         .remove([image.imageKey]);
@@ -54,19 +62,19 @@ export async function DELETE(
 
     const imagesWithSignedUrls = await Promise.all(
       remainingImages.map(async (img) => {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await supabase
           .storage
           .from('post-images')
           .createSignedUrl(img.imageKey, 60 * 60);
 
-      if (error) {
-          console.warn(`Failed to create signed URL for ${img.imageKey}:`,error.message);
-      }
-    
-       return {
-          ...img,
-          signedUrl: data?.signedUrl ?? null, 
+        if (error) {
+          console.warn(`Failed to create signed URL for ${img.imageKey}:`, error.message);
         }
+
+        return {
+          ...img,
+          signedUrl: data?.signedUrl ?? null,
+        };
       })
     );
 

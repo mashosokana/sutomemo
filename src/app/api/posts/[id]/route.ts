@@ -2,7 +2,6 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const SIGNED_URL_EXPIRY = 60 * 60;
@@ -19,10 +18,19 @@ function parsePostId(params: { id: string }) {
   return { postId, error: null };
 }
 
+async function getAuthUser(req: Request) {
+  const token = req.headers.get("Authorization") ?? "";
+  const { data: userData, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !userData?.user) {
+    return { user: null, error: "Unauthorized", status: 401 };
+  }
+  return { user: userData.user, error: null, status: 200 };
+}
+
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const { user, error: authError, status } = await verifyUser(req);
+  const { user, error, status } = await getAuthUser(req);
   if (!user) {
-    return NextResponse.json({ error: authError }, { status });
+    return NextResponse.json({ error }, { status });
   }
 
   const { postId, error: idError } = parsePostId(params);
@@ -68,9 +76,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const { user, error: authError, status } = await verifyUser(req);
+  const { user, error, status } = await getAuthUser(req);
   if (!user) {
-    return NextResponse.json({ error: authError }, { status });
+    return NextResponse.json({ error }, { status });
   }
 
   const { postId, error: idError } = parsePostId(params);
@@ -94,8 +102,6 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     });
 
     const firstPostId = guestPosts[0]?.id;
-
-    console.log("ゲスト編集チェック:", { guestPosts, editingId: existingPost.id })
 
     if (!firstPostId || existingPost.id !== firstPostId) {
       return NextResponse.json(
@@ -131,7 +137,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const { user, error, status } = await verifyUser(req);
+  const { user, error, status } = await getAuthUser(req);
   if (!user) {
     return NextResponse.json({ error }, { status });
   }

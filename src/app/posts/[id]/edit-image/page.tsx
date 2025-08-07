@@ -14,6 +14,8 @@ export default function EditImagePage() {
 
   const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
   const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 400 });
+  const [isProcessing, setIsProcessing] = useState(false);
+
 
   useEffect(() => {
     const fetchImageAndMemo = async () => {
@@ -120,10 +122,15 @@ export default function EditImagePage() {
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
-    const link = document.createElement("a");
-    link.download = `post-${id}-memo.png`;
-    link.href = canvasRef.current.toDataURL("image/png");
-    link.click();
+    setIsProcessing(true);
+    try {
+      const link = document.createElement("a");
+      link.download = `post-${id}-memo.png`;
+      link.href = canvasRef.current.toDataURL("image/png");
+      link.click();
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -143,6 +150,7 @@ export default function EditImagePage() {
         onChange={e => setText(e.target.value)}
         rows={4}
         className="w-full border p-2 rounded mb-4"
+        disabled={isProcessing}
       />
 
       <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -156,6 +164,7 @@ export default function EditImagePage() {
             onChange={e =>
               setTextBoxSize(size => ({ ...size, width: Number(e.target.value) }))
             }
+            disabled={isProcessing}
           />
         </label>
         <label className="flex items-center gap-2">
@@ -168,6 +177,7 @@ export default function EditImagePage() {
             onChange={e =>
               setTextBoxSize(size => ({ ...size, height: Number(e.target.value) }))
             }
+            disabled={isProcessing}
           />
         </label>
       </div>
@@ -176,6 +186,7 @@ export default function EditImagePage() {
         <button
           onClick={handleDownload}
           className="bg-black text-white px-4 py-2 rounded"
+          disabled={isProcessing}
         >
           ダウンロード
         </button>
