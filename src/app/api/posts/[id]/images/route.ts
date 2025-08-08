@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { v4 as uuidv4 } from "uuid";
 
@@ -14,10 +13,12 @@ function parsePostId(id: string) {
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const { user, error, status } = await verifyUser(req);
-  if (!user) {
-    return NextResponse.json({ error }, { status });
+  const token = req.headers.get("Authorization") ?? "";
+  const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token);
+  if (authError || !userData?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const user = userData.user;
 
   const postId = parsePostId(params.id);
   if (!postId) {
@@ -86,10 +87,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const { user, error, status } = await verifyUser(req);
-  if (!user) {
-    return NextResponse.json({ error }, { status });
+  const token = req.headers.get("Authorization") ?? "";
+  const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token);
+  if (authError || !userData?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const user = userData.user;
 
   const postId = parsePostId(params.id);
   if (!postId) {

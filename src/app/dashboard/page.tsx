@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
@@ -24,9 +24,9 @@ type PostType = {
   id: number;
   caption: string;
   memo: MemoType | null;
-  imageUrl?: string;
+  imageUrl?: string; 
   createdAt: string;
-  images: ImageData[];
+  images?: ImageData[];
 };
 
 export default function DashboardPage() {
@@ -35,8 +35,7 @@ export default function DashboardPage() {
 
   const [posts, setPosts] = useState<PostType[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loadingPosts, setLoadingPosts] = useState(true);
-
+  const [loadingPosts, setLoadingPosts] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -46,34 +45,50 @@ export default function DashboardPage() {
   }, [isLoading, session, router]);
 
   useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
     const fetchPosts = async () => {
-      if (!token) return;
+      setLoadingPosts(true);
+      setError(null);
 
       try {
         const res = await fetch("/api/posts", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
+          signal: ac.signal,
+          cache: "no-store",
         });
 
         const data = await res.json();
 
         if (!res.ok) {
+          if (res.status === 401) {
+            router.replace("/login");
+            return;
+          }
           throw new Error(data.error || "投稿取得に失敗しました");
         }
 
-        setPosts(data.posts || []);
+        const list: PostType[] = Array.isArray(data.posts) ? data.posts : [];
+        list.sort((a, b) => {
+          const tb = Date.parse(b.createdAt);
+          const ta = Date.parse(a.createdAt);
+          return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+        });
+        setPosts(list);
       } catch (err: unknown) {
-        setError(
-          err instanceof Error ? err.message : "不明なエラーが発生しました"
-        );
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return; 
+        }
+        setError(err instanceof Error ? err.message : "不明なエラーが発生しました");
       } finally {
         setLoadingPosts(false);
       }
     };
 
     fetchPosts();
-  }, [token]);
+    return () => ac.abort();
+  }, [token, router]);
 
   type DeleteResponse = {
     success?: boolean;
@@ -81,42 +96,58 @@ export default function DashboardPage() {
     error?: string;
   };
 
-  const handleDelete = async (postId: number) => {
+  const handleDelete = useCallback(async (postId: number) => {
     if (!token) return;
     if (!confirm("この投稿を削除しますか？")) return;
 
     try {
-      console.log("削除開始: ", postId);
       const res = await fetch(`/api/posts/${postId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
 
       const result: DeleteResponse = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          router.replace("/login");
+          return;
+        }
         throw new Error(result.error || "削除に失敗しました");
       }
 
-      setPosts((prev) => prev.filter((post) => post.id !== postId));
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
     } catch (err: unknown) {
-      alert(
-        err instanceof Error ? err.message : "不明なエラーが発生しました"
-      );
+      alert(err instanceof Error ? err.message : "不明なエラーが発生しました");
     }
-  };
+  }, [token, router]);
 
-  const filteredPosts = posts.filter((post) => {
-    const text = 
-    `${post.caption}, 
-    ${post.memo?.answerWhy ?? ""},
-    ${post.memo?.answerWhat ?? ""},
-    ${post.memo?.answerNext ?? ""},
-    ${new Date(post.createdAt).toLocaleDateString("ja-JP")}`;
-    return text.includes(searchQuery);
-  });
+  const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  if (isLoading || loadingPosts) {
-    return <div className="p-4 text-red-500">読み込み中...: {error}</div>;
+  const filteredPosts = useMemo(() => {
+    if (!normalizedQuery) return posts;
+
+    return posts.filter((post) => {
+      const text = [
+        post.caption ?? "",
+        post.memo?.answerWhy ?? "",
+        post.memo?.answerWhat ?? "",
+        post.memo?.answerNext ?? "",
+        new Date(post.createdAt).toLocaleDateString("ja-JP"),
+      ]
+        .filter(Boolean).join(" ")
+        .toLowerCase();
+
+      return text.includes(normalizedQuery);
+    });
+  }, [posts, normalizedQuery]);
+
+  if (!isLoading && !session) {
+    return <div className="p-4">ログインページへ移動します...</div>;
+  }
+
+  if (loadingPosts) {
+    return <div className="p-4">読み込み中...</div>;
   }
 
   if (error) {
@@ -128,12 +159,13 @@ export default function DashboardPage() {
       <div className="mb-4 text-black">
         <input
           type="text"
-          placeholder="検索（日付や内容"
+          placeholder="検索（日付や内容）"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full px-4 py-2 border rounded-md"
-        />  
+        />
       </div>
+
       <div className="mb-6">
         <Link
           href="/compose/input"
@@ -147,19 +179,29 @@ export default function DashboardPage() {
         <p className="text-gray-600">まだ投稿がありません</p>
       ) : (
         <ul className="space-y-4">
-          {filteredPosts.map((post) => (
-            <li key={post.id} className="border-b pb-6">
-              <DashboardPostCard
-                date={new Date(post.createdAt).toLocaleDateString("ja-JP")}
-                content={`${post.caption}\n${post.memo?.answerWhy ?? ""}\n${
-                  post.memo?.answerWhat ?? ""
-                }\n${post.memo?.answerNext ?? ""}`}
-                imageUrl={post.imageUrl}
-                onEdit={() => router.push(`/posts/${post.id}`)}
-                onDelete={() => handleDelete(post.id)}
-              />
-            </li>
-          ))}
+          {filteredPosts.map((post) => {
+            const firstImageUrl =
+              post.imageUrl || post.images?.[0]?.url || undefined;
+
+            return (
+              <li key={post.id} className="border-b pb-6">
+                <DashboardPostCard
+                  date={new Date(post.createdAt).toLocaleDateString("ja-JP")}
+                  content={[
+                    post.caption,
+                    post.memo?.answerWhy,
+                    post.memo?.answerWhat,
+                    post.memo?.answerNext,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
+                  imageUrl={firstImageUrl}
+                  onEdit={() => router.push(`/posts/${post.id}`)}
+                  onDelete={() => handleDelete(post.id)}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
     </main>
