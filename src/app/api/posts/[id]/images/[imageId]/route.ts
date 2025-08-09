@@ -1,90 +1,83 @@
 // /src/app/api/posts/[id]/images/[imageId]/route.ts
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { supabase } from '@/lib/supabase';
-import { z } from 'zod';
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { z } from "zod";
 
 const ParamsSchema = z.object({
   id: z.string().regex(/^\d+$/).transform((val) => parseInt(val, 10)),
   imageId: z.string().regex(/^\d+$/).transform((val) => parseInt(val, 10)),
 });
 
+async function getAuthUser(req: Request) {
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+  if (!token) return { user: null, status: 401 as const };
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data?.user) return { user: null, status: 401 as const };
+  return { user: data.user, status: 200 as const };
+}
+
 export async function DELETE(
   req: Request,
   { params }: { params: { id: string; imageId: string } }
 ) {
   try {
-    const token = req.headers.get('Authorization') ?? '';
-    const { data: userData, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !userData?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { user, status } = await getAuthUser(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status });
 
     const parsed = ParamsSchema.safeParse(params);
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
+      return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
     }
-
     const { id: postId, imageId } = parsed.data;
 
     const image = await prisma.image.findFirst({
       where: {
         id: imageId,
-        post: {
-          id: postId,
-          userId: userData.user.id,
-        },
-      },
-      include: {
-        post: true,
+        post: { id: postId, userId: user.id },
       },
     });
-
     if (!image) {
-      return NextResponse.json({ error: 'Image not found or forbidden' }, { status: 404 });
+      return NextResponse.json({ error: "Image not found or forbidden" }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
-      const { error: storageError } = await supabase
-        .storage
-        .from('post-images')
-        .remove([image.imageKey]);
+    const { error: storageError } = await supabaseAdmin
+      .storage
+      .from("post-images")
+      .remove([image.imageKey]);
+    if (storageError) {
+      console.warn("Storage delete failed:", storageError.message);
+      return NextResponse.json({ error: "Failed to delete file" }, { status: 500 });
+    }
 
-      if (storageError) throw new Error('Storage delete failed');
-
-      await tx.image.delete({ where: { id: imageId } });
-    });
+    await prisma.image.delete({ where: { id: imageId } });
 
     const remainingImages = await prisma.image.findMany({
       where: { postId },
+      orderBy: { id: "asc" },
     });
 
-    const imagesWithSignedUrls = await Promise.all(
+    const images = await Promise.all(
       remainingImages.map(async (img) => {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
           .storage
-          .from('post-images')
+          .from("post-images")
           .createSignedUrl(img.imageKey, 60 * 60);
-
         if (error) {
           console.warn(`Failed to create signed URL for ${img.imageKey}:`, error.message);
         }
-
         return {
-          ...img,
-          signedUrl: data?.signedUrl ?? null,
+          id: img.id,
+          key: img.imageKey,
+          url: data?.signedUrl ?? null,
         };
       })
     );
 
-    return NextResponse.json({
-      success: true,
-      deletedId: imageId,
-      images: imagesWithSignedUrls,
-    });
+    return NextResponse.json({ success: true, deletedId: imageId, images }, { status: 200 });
   } catch (error) {
-    console.error("Delete API error:", error);
+    console.error("DELETE /api/posts/[id]/images/[imageId] error:", error);
     return NextResponse.json(
       { error: "Internal server error", details: String(error) },
       { status: 500 }
