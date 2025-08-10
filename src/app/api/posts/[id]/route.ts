@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import type { Prisma, Image as DbImage } from "@prisma/client";
 
 const SIGNED_URL_EXPIRY = 60 * 60; // 1h
 
@@ -43,21 +44,21 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const post = await prisma.post.findFirst({
       where: { id: postId, userId: user.id },
-      include: { memo: true, images: true },
-    });
+      include: { 
+        memo: true,
+        images: { orderBy: { generatedAt: 'asc' } },
+     },
+    }) as Prisma.PostGetPayload<{ include: { memo: true; images: true } }> | null;
 
     if (!post) {
       return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
     }
 
     const imagesWithSignedUrls = await Promise.all(
-      post.images.map(async (img) => {
-        if (!img.imageKey) {
-          return { ...img, url: null as string | null };
-        }
+      post.images.map(async (img: DbImage) => {
         const { data, error } = await supabaseAdmin.storage
-          .from("post-images")
-          .createSignedUrl(img.imageKey, SIGNED_URL_EXPIRY);
+        .from("post-images")
+        .createSignedUrl(img.imageKey, SIGNED_URL_EXPIRY);
 
         if (error) {
           console.warn(`Failed to create signed URL for ${img.imageKey}`, error.message);
@@ -65,7 +66,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
         return {
           ...img,
-          url: data?.signedUrl ?? null, 
+          signedUrl: data?.signedUrl ?? "",
         };
       })
     );
@@ -82,6 +83,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     );
   }
 }
+
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {

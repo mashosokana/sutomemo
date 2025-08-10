@@ -13,7 +13,7 @@ export default function EditImagePage() {
   const [text, setText] = useState("好きなテキストを入力");
 
   const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
-  const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 400 });
+  const [textBoxSize, setTextBoxSize] = useState({ width: 260, height: 400 });
   const [isProcessing, setIsProcessing] = useState(false);
 
 
@@ -38,7 +38,6 @@ export default function EditImagePage() {
     fetchImageAndMemo();
   }, [id, token]);
 
-  // 再描画処理
   useEffect(() => {
     if (!canvasRef.current || !imageUrl) return;
 
@@ -62,7 +61,6 @@ export default function EditImagePage() {
       ctx.clearRect(0, 0, newWidth, newHeight);
       ctx.drawImage(image, 0, 0, newWidth, newHeight);
 
-      // テキストボックスが画像外に出ないように制限
       const clampedX = Math.min(
         Math.max(0, dragOffset.x),
         newWidth - textBoxSize.width
@@ -72,11 +70,9 @@ export default function EditImagePage() {
         newHeight - textBoxSize.height
       );
 
-      // 背景
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fillRect(clampedX, clampedY, textBoxSize.width, textBoxSize.height);
 
-      // テキスト
       ctx.font = "16px sans-serif";
       ctx.fillStyle = "#fff";
       ctx.textBaseline = "top";
@@ -86,14 +82,12 @@ export default function EditImagePage() {
         ctx.fillText(line, clampedX + 10, clampedY + 10 + i * 20);
       });
 
-      // state更新（外に出ていたら戻す）
       if (clampedX !== dragOffset.x || clampedY !== dragOffset.y) {
         setDragOffset({ x: clampedX, y: clampedY });
       }
     };
   }, [imageUrl, text, dragOffset, textBoxSize]);
 
-  // ドラッグ操作
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const startX = e.nativeEvent.offsetX;
     const startY = e.nativeEvent.offsetY;
@@ -159,7 +153,7 @@ export default function EditImagePage() {
           <input
             type="range"
             min={100}
-            max={300}
+            max={260}
             value={textBoxSize.width}
             onChange={e =>
               setTextBoxSize(size => ({ ...size, width: Number(e.target.value) }))

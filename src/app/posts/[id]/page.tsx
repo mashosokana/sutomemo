@@ -13,11 +13,75 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
   const [image, setImage] = useState<PostImage | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const postId = Number(params.id);
-  const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 120 });
+  const [textBoxSize, setTextBoxSize] = useState({ width: 260, height: 120 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [isGuest, setIsGuest] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const hasLocalOverride = useRef(false);
+
+  type OverlaySettings = {
+    text: string;
+    fontSize: 'small' | 'medium' | 'large';
+    textBoxSize: { width: number; height: number };
+    dragOffset: { x: number; y: number };
+  };
+
+  useEffect(() => {
+    const key = `post:${postId}:edit`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<OverlaySettings>;
+  
+      let restored = false;
+      if (saved.text != null) { setText(saved.text); restored = true; }
+      if (saved.fontSize)     { setFontSize(saved.fontSize); restored = true; }
+      if (saved.textBoxSize)  { setTextBoxSize(saved.textBoxSize); restored = true; }
+      if (saved.dragOffset)   { setDragOffset(saved.dragOffset); restored = true; }
+  
+      if (restored) hasLocalOverride.current = true; 
+    } catch (e) {
+      console.warn('restore failed', e);
+    }
+  }, [postId]);
+
+  function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 300) {
+    let t: ReturnType<typeof setTimeout>;
+    return (...args: A): void => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  // ★ 復元
+  useEffect(() => {
+    const key = `post:${postId}:edit`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<OverlaySettings>;
+
+      if (saved.text != null) setText(saved.text);
+      if (saved.fontSize) setFontSize(saved.fontSize);
+      if (saved.textBoxSize) setTextBoxSize(saved.textBoxSize);
+      if (saved.dragOffset) setDragOffset(saved.dragOffset);
+    } catch (e) {
+      console.warn('restore failed', e);
+    }
+  }, [postId]);
+
+  // ★ 保存
+  const persist = useRef(
+    debounce((settings: OverlaySettings) => {
+      const key = `post:${postId}:edit`;
+      localStorage.setItem(key, JSON.stringify(settings));
+    }, 300)
+  ).current;
+
+  useEffect(() => {
+    persist({ text, fontSize, textBoxSize, dragOffset });
+  }, [text, fontSize, textBoxSize, dragOffset, persist, postId]);
 
 
   useEffect(() => {
@@ -43,7 +107,9 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
         fetchedPost.memo?.answerWhat,
         fetchedPost.memo?.answerNext,
       ].filter(Boolean).join('\n\n');
-      setText(combinedText);
+      if (!hasLocalOverride.current) {
+        setText(combinedText);
+      }
       setImage(fetchedPost.images?.[fetchedPost.images.length - 1] ?? null);
     };
 
