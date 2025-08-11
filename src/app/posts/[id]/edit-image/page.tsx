@@ -32,7 +32,9 @@ export default function EditImagePage() {
           .filter(Boolean)
           .join("\n\n")
       );
-      setImageUrl(post.images?.[0]?.signedUrl ?? null);
+      const imgs: Array<{ signedUrl?: string | null }> = post.images ?? [];
+      const picked = [...imgs].reverse().find(i => i?.signedUrl);
+      setImageUrl(picked?.signedUrl ?? null);
     };
 
     fetchImageAndMemo();
@@ -48,6 +50,9 @@ export default function EditImagePage() {
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.src = imageUrl;
+    image.onerror = (ev) => {
+      console.error("EditImage: image load error", { src: imageUrl, ev });
+    };
 
     image.onload = () => {
       const fixedWidth = 300;

@@ -1,5 +1,4 @@
 // app/posts/[id]/page.tsx
-
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -13,11 +12,13 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
   const [image, setImage] = useState<PostImage | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const postId = Number(params.id);
+
   const [textBoxSize, setTextBoxSize] = useState({ width: 260, height: 120 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [isGuest, setIsGuest] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
   const hasLocalOverride = useRef(false);
 
   type OverlaySettings = {
@@ -27,25 +28,6 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
     dragOffset: { x: number; y: number };
   };
 
-  useEffect(() => {
-    const key = `post:${postId}:edit`;
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Partial<OverlaySettings>;
-  
-      let restored = false;
-      if (saved.text != null) { setText(saved.text); restored = true; }
-      if (saved.fontSize)     { setFontSize(saved.fontSize); restored = true; }
-      if (saved.textBoxSize)  { setTextBoxSize(saved.textBoxSize); restored = true; }
-      if (saved.dragOffset)   { setDragOffset(saved.dragOffset); restored = true; }
-  
-      if (restored) hasLocalOverride.current = true; 
-    } catch (e) {
-      console.warn('restore failed', e);
-    }
-  }, [postId]);
-
   function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 300) {
     let t: ReturnType<typeof setTimeout>;
     return (...args: A): void => {
@@ -54,7 +36,6 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
     };
   }
 
-  // ★ 復元
   useEffect(() => {
     const key = `post:${postId}:edit`;
     try {
@@ -62,16 +43,18 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
       if (!raw) return;
       const saved = JSON.parse(raw) as Partial<OverlaySettings>;
 
-      if (saved.text != null) setText(saved.text);
-      if (saved.fontSize) setFontSize(saved.fontSize);
-      if (saved.textBoxSize) setTextBoxSize(saved.textBoxSize);
-      if (saved.dragOffset) setDragOffset(saved.dragOffset);
+      let restored = false;
+      if (saved.text != null) { setText(saved.text); restored = true; }
+      if (saved.fontSize)     { setFontSize(saved.fontSize); restored = true; }
+      if (saved.textBoxSize)  { setTextBoxSize(saved.textBoxSize); restored = true; }
+      if (saved.dragOffset)   { setDragOffset(saved.dragOffset); restored = true; }
+
+      if (restored) hasLocalOverride.current = true;
     } catch (e) {
       console.warn('restore failed', e);
     }
   }, [postId]);
 
-  // ★ 保存
   const persist = useRef(
     debounce((settings: OverlaySettings) => {
       const key = `post:${postId}:edit`;
@@ -83,15 +66,13 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
     persist({ text, fontSize, textBoxSize, dragOffset });
   }, [text, fontSize, textBoxSize, dragOffset, persist, postId]);
 
-
   useEffect(() => {
     setIsGuest(session?.user?.email === 'guest@example.com');
   }, [session]);
 
   useEffect(() => {
     if (!token || isNaN(postId)) return;
-
-    if (isGuest) return; 
+    if (isGuest) return;
 
     const fetchPost = async () => {
       const res = await fetch(`/api/posts/${postId}`, {
@@ -101,16 +82,21 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
       const data = await res.json();
       const fetchedPost = data.post as PostDetail;
       setPost(fetchedPost);
+
       const combinedText = [
         fetchedPost.caption,
         fetchedPost.memo?.answerWhy,
         fetchedPost.memo?.answerWhat,
         fetchedPost.memo?.answerNext,
       ].filter(Boolean).join('\n\n');
+
       if (!hasLocalOverride.current) {
         setText(combinedText);
       }
-      setImage(fetchedPost.images?.[fetchedPost.images.length - 1] ?? null);
+
+      const imgs = fetchedPost.images ?? [];
+      const picked = [...imgs].reverse().find(i => i && i.signedUrl);
+      setImage(picked ?? null);
     };
 
     fetchPost();
@@ -159,20 +145,6 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
 
       const data = await res.json();
       if (data.image) setImage(data.image);
-    } finally {
-      setIsProcessing(false); 
-    }
-  };
-
-  const handleDownload = () => {
-    if (!canvasRef.current || !image?.signedUrl) return;
-
-    setIsProcessing(true);
-    try {
-      const link = document.createElement('a');
-      link.download = `post-${postId}-with-text.png`;
-      link.href = canvasRef.current.toDataURL('image/png');
-      link.click();
     } finally {
       setIsProcessing(false);
     }
@@ -223,6 +195,10 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
         setDragOffset({ x: clampedX, y: clampedY });
       }
     };
+
+    img.onerror = (ev) => {
+      console.error('Image load error', { src: image.signedUrl, ev });
+    };
   }, [image, text, textBoxSize, dragOffset, fontSize]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -244,6 +220,19 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleDownload = () => {
+    if (!canvasRef.current || !image?.signedUrl) return;
+    setIsProcessing(true);
+    try {
+      const link = document.createElement('a');
+      link.download = `post-${postId}-with-text.png`;
+      link.href = canvasRef.current.toDataURL('image/png');
+      link.click();
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (isGuest) {
