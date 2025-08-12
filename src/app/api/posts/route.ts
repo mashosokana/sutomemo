@@ -65,13 +65,17 @@ export async function GET(req: Request) {
     const posts = await prisma.post.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      include: { memo: true, images: true },
+      include: { 
+        memo: true, 
+        images: { orderBy: {generatedAt: "desc"} },
+      },
     });
 
     const postsWithSignedUrls = await Promise.all(
       posts.map(async (post) => {
+        const nonHeic = post.images.filter(img => !/\.hei(c|f)$/i.test(img.imageKey));
         const signedImages = await Promise.all(
-          post.images.map(async (img) => {
+          nonHeic.map(async (img) => {
             const { data: signed, error: signedError } = await supabaseAdmin
               .storage
               .from("post-images")
@@ -79,16 +83,18 @@ export async function GET(req: Request) {
             if (signedError) {
               console.warn(`Signed URL creation failed: ${signedError.message}`);
             }
-            return { id: img.id, key: img.imageKey, url: signed?.signedUrl ?? null };
+            return { id: img.id, imageKey: img.imageKey, signedUrl: signed?.signedUrl ?? "" };
           })
         );
+
+        const imageUrl = signedImages[0]?.signedUrl ?? null;
 
         return {
           id: post.id,
           caption: post.caption,
           createdAt: post.createdAt,
           memo: post.memo,
-          imageUrl: signedImages[0]?.url ?? null, 
+          imageUrl, 
           images: signedImages,
         };
       })

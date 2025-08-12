@@ -46,7 +46,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       where: { id: postId, userId: user.id },
       include: { 
         memo: true,
-        images: { orderBy: { generatedAt: 'asc' } },
+        images: { orderBy: { generatedAt: 'desc' } },
      },
     }) as Prisma.PostGetPayload<{ include: { memo: true; images: true } }> | null;
 
@@ -54,8 +54,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
     }
 
+    const nonHeicImages = post.images.filter((img: DbImage) => !/\.hei(c|f)$/i.test(img.imageKey));
+
     const imagesWithSignedUrls = await Promise.all(
-      post.images.map(async (img: DbImage) => {
+      nonHeicImages.map(async (img: DbImage) => {
         const { data, error } = await supabaseAdmin.storage
         .from("post-images")
         .createSignedUrl(img.imageKey, SIGNED_URL_EXPIRY);
@@ -72,7 +74,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     );
 
     return NextResponse.json(
-      { post: { ...post, images: imagesWithSignedUrls ?? [] } },
+      { post: { ...post, images: imagesWithSignedUrls } },
       { status: 200 }
     );
   } catch (e) {

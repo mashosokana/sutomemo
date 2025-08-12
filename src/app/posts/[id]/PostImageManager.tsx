@@ -3,8 +3,11 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
 import Image from "next/image";
-import heic2any from "heic2any"; // ★ 型定義を作ったので型エラー解消
 import { PostImage, PostMemo } from "../../../../types/post";
+
+type DeleteImagesResponse = { images?: PostImage[] };
+type UploadImageResponse = { image?: PostImage };
+type GetPostResponse = { post?: { images?: PostImage[] } };
 
 type Props = {
   postId: number;
@@ -40,7 +43,6 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
           "Content-Type": "application/json",
           Authorization: `Bearer ${token ?? ""}`,
         },
-        // APIが単一削除に対応しているなら imageKey を渡す
         body: JSON.stringify({ imageKey: targetImage.imageKey }),
       });
 
@@ -49,35 +51,46 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
         return;
       }
 
-      const result: { images?: PostImage[] } = await res.json();
+      const result: DeleteImagesResponse = await res.json();
       setLocalImages(result.images ?? []);
     } finally {
       setDeleting(null);
     }
   };
 
-  // ★ HEIC → JPEG 変換（失敗したら元のファイルを返す）
+  // HEIC → JPEG 変換（Blob[] 返却・SSR衝突に対応）
   const convertHeicIfNeeded = async (file: File): Promise<File> => {
+    const lower = file.name.toLowerCase();
     const isHeic =
       file.type === "image/heic" ||
       file.type === "image/heif" ||
-      file.name.toLowerCase().endsWith(".heic") ||
-      file.name.toLowerCase().endsWith(".heif");
+      lower.endsWith(".heic") ||
+      lower.endsWith(".heif");
 
     if (!isHeic) return file;
 
     try {
-      const convertedBlob = await heic2any({
+      const { default: heic2any } = await import("heic2any");
+      const out = await heic2any({
         blob: file,
         toType: "image/jpeg",
         quality: 0.9,
       });
-      return new File([convertedBlob], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
-        type: "image/jpeg",
-      });
+
+      const blob: Blob = Array.isArray(out) ? out[0] : out; // ← Blob[]対策
+      const newFile = new File(
+        [blob],
+        file.name.replace(/\.(heic|heif)$/i, ".jpg"),
+        { type: "image/jpeg", lastModified: file.lastModified }
+      );
+
+      // デバッグしたいときに↓を一時的に有効化
+      // console.log("[convert] before:", file.type, file.name, "after:", newFile.type, newFile.name);
+
+      return newFile;
     } catch (err) {
       console.error("HEIC変換に失敗しました。元ファイルをアップロードします:", err);
-      return file;
+      return file; // フォールバック：そのまま送る（サーバ側で弾かない設計ならOK）
     }
   };
 
@@ -88,7 +101,7 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
     try {
       let file = e.target.files[0];
 
-      // ★ アップロード前に HEIC → JPEG 変換
+      // アップロード前に HEIC → JPEG 変換
       file = await convertHeicIfNeeded(file);
 
       const formData = new FormData();
@@ -105,19 +118,22 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
         return;
       }
 
-      const { image } = await res.json();
+      const uploadJson: UploadImageResponse = await res.json();
 
-      if (image?.signedUrl) {
-        setLocalImages([image as PostImage]);
+      if (uploadJson.image?.signedUrl) {
+        setLocalImages([uploadJson.image]);
       } else {
-        // フォールバック：GET で取り直し（API側が GET で必ず signedUrl を付与している前提）
+        // フォールバック：GET で取り直し（HEIC除外）
         const getRes = await fetch(`/api/posts/${postId}`, {
           headers: { Authorization: `Bearer ${token ?? ""}` },
         });
         if (getRes.ok) {
-          const data = await getRes.json();
-          const imgs = (data.post?.images ?? []) as PostImage[];
-          const picked = [...imgs].reverse().find(i => i?.signedUrl);
+          const data: GetPostResponse = await getRes.json();
+          const imgs = data.post?.images ?? [];
+          // 末尾が .heic/.heif の URL は拾わない（最適化500対策）
+          const picked = [...imgs]
+            .reverse()
+            .find((i) => i?.signedUrl && !/(\.heic|\.heif)(\?|$)/i.test(i.signedUrl));
           setLocalImages(picked ? [picked] : []);
         } else {
           console.warn("アップロード直後のGETが失敗しました");
@@ -132,6 +148,7 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
     <div className="flex flex-col items-center max-w-xs mx-auto p-4 shadow space-y-4">
       {localImages.length > 0 && localImages[0].signedUrl ? (
         <Image
+          key={localImages[0].signedUrl}  // URL変化時に確実に再描画
           src={localImages[0].signedUrl}
           alt="投稿画像"
           width={240}
@@ -163,7 +180,7 @@ export default function PostImageManager({ postId, initialImages, caption, memo 
       <input
         id="fileUpload"
         type="file"
-        accept="image/*,.heic,.heif"  // ★ 明示的に heic/heif も許可
+        accept="image/*,.heic,.heif"  // 明示的に heic/heif 許可
         onChange={handleUpload}
         className="hidden"
       />

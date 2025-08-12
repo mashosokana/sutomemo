@@ -1,5 +1,4 @@
 // app/dashboard/page.tsx
-
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
@@ -16,17 +15,23 @@ type MemoType = {
 
 type ImageData = {
   id: number;
-  key: string;
-  url: string;
+  imageKey: string;
+  signedUrl: string; 
 };
 
 type PostType = {
   id: number;
   caption: string;
   memo: MemoType | null;
-  imageUrl?: string; 
   createdAt: string;
-  images?: ImageData[];
+  imageUrl?: string | null; 
+  images?: ImageData[];     
+};
+
+type DeleteResponse = {
+  success?: boolean;
+  deletedId?: number;
+  error?: string;
 };
 
 export default function DashboardPage() {
@@ -48,18 +53,17 @@ export default function DashboardPage() {
     if (!token) return;
 
     const ac = new AbortController();
+
     const fetchPosts = async () => {
       setLoadingPosts(true);
       setError(null);
-
       try {
         const res = await fetch("/api/posts", {
           headers: { Authorization: `Bearer ${token}` },
           signal: ac.signal,
           cache: "no-store",
         });
-
-        const data = await res.json();
+        const data: { posts?: PostType[]; error?: string } = await res.json();
 
         if (!res.ok) {
           if (res.status === 401) {
@@ -69,7 +73,8 @@ export default function DashboardPage() {
           throw new Error(data.error || "投稿取得に失敗しました");
         }
 
-        const list: PostType[] = Array.isArray(data.posts) ? data.posts : [];
+        const list = Array.isArray(data.posts) ? data.posts : [];
+        
         list.sort((a, b) => {
           const tb = Date.parse(b.createdAt);
           const ta = Date.parse(a.createdAt);
@@ -77,9 +82,7 @@ export default function DashboardPage() {
         });
         setPosts(list);
       } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === "AbortError") {
-          return; 
-        }
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "不明なエラーが発生しました");
       } finally {
         setLoadingPosts(false);
@@ -90,37 +93,34 @@ export default function DashboardPage() {
     return () => ac.abort();
   }, [token, router]);
 
-  type DeleteResponse = {
-    success?: boolean;
-    deletedId?: number;
-    error?: string;
-  };
+  const handleDelete = useCallback(
+    async (postId: number) => {
+      if (!token) return;
+      if (!confirm("この投稿を削除しますか？")) return;
 
-  const handleDelete = useCallback(async (postId: number) => {
-    if (!token) return;
-    if (!confirm("この投稿を削除しますか？")) return;
+      try {
+        const res = await fetch(`/api/posts/${postId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
 
-    try {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-
-      const result: DeleteResponse = await res.json();
-      if (!res.ok) {
-        if (res.status === 401) {
-          router.replace("/login");
-          return;
+        const result: DeleteResponse = await res.json();
+        if (!res.ok) {
+          if (res.status === 401) {
+            router.replace("/login");
+            return;
+          }
+          throw new Error(result.error || "削除に失敗しました");
         }
-        throw new Error(result.error || "削除に失敗しました");
-      }
 
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "不明なエラーが発生しました");
-    }
-  }, [token, router]);
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "不明なエラーが発生しました");
+      }
+    },
+    [token, router]
+  );
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -135,7 +135,8 @@ export default function DashboardPage() {
         post.memo?.answerNext ?? "",
         new Date(post.createdAt).toLocaleDateString("ja-JP"),
       ]
-        .filter(Boolean).join(" ")
+        .filter(Boolean)
+        .join(" ")
         .toLowerCase();
 
       return text.includes(normalizedQuery);
@@ -145,11 +146,9 @@ export default function DashboardPage() {
   if (!isLoading && !session) {
     return <div className="p-4">ログインページへ移動します...</div>;
   }
-
   if (loadingPosts) {
     return <div className="p-4">読み込み中...</div>;
   }
-
   if (error) {
     return <div className="p-4 text-red-500">エラー: {error}</div>;
   }
@@ -181,7 +180,7 @@ export default function DashboardPage() {
         <ul className="space-y-4">
           {filteredPosts.map((post) => {
             const firstImageUrl =
-              post.imageUrl || post.images?.[0]?.url || undefined;
+              post.imageUrl || post.images?.[0]?.signedUrl || undefined;
 
             return (
               <li key={post.id} className="border-b pb-6">
