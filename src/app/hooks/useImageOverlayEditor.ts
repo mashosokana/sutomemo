@@ -1,4 +1,4 @@
-//src/app/posts/_hooks/useImageOverlayEditor.ts
+//src/app/posts/hooks/useImageOverlayEditor.ts
 
 "use client";
 
