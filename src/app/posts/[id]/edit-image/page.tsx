@@ -1,136 +1,35 @@
+//src/app/posts/[id]/edit-image/page.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
+import { useImageOverlayEditor } from "@/app/hooks/useImageOverlayEditor"; 
 
 export default function EditImagePage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
+  const postId = Number(id);
   const { token } = useSupabaseSession();
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [text, setText] = useState("好きなテキストを入力");
-
-  const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
-  const [textBoxSize, setTextBoxSize] = useState({ width: 260, height: 400 });
-  const [isProcessing, setIsProcessing] = useState(false);
-
-
-  useEffect(() => {
-    const fetchImageAndMemo = async () => {
-      if (!token) return;
-      const res = await fetch(`/api/posts/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const post = data.post;
-
-      setText(
-        [post.caption, post.memo?.answerWhy, post.memo?.answerWhat, post.memo?.answerNext]
-          .filter(Boolean)
-          .join("\n\n")
-      );
-      const imgs: Array<{ signedUrl?: string | null }> = post.images ?? [];
-      const picked = [...imgs].reverse().find(i => i?.signedUrl);
-      setImageUrl(picked?.signedUrl ?? null);
-    };
-
-    fetchImageAndMemo();
-  }, [id, token]);
+  const {
+    text, setText,
+    textBoxSize, setTextBoxSize,
+    dragOffset,
+    isProcessing,
+    initFromPost,
+    drawOnCanvas,
+    bindCanvasDrag,
+    downloadCanvas,
+  } = useImageOverlayEditor({ postId, token });
 
   useEffect(() => {
-    if (!canvasRef.current || !imageUrl) return;
+    initFromPost();
+  }, [initFromPost]);
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.src = imageUrl;
-    image.onerror = (ev) => {
-      console.error("EditImage: image load error", { src: imageUrl, ev });
-    };
-
-    image.onload = () => {
-      const fixedWidth = 300;
-      const scale = fixedWidth / image.width;
-      const newWidth = fixedWidth;
-      const newHeight = image.height * scale;
-
-      canvas.width = newWidth;
-      canvas.height = newHeight;
-
-      ctx.clearRect(0, 0, newWidth, newHeight);
-      ctx.drawImage(image, 0, 0, newWidth, newHeight);
-
-      const clampedX = Math.min(
-        Math.max(0, dragOffset.x),
-        newWidth - textBoxSize.width
-      );
-      const clampedY = Math.min(
-        Math.max(0, dragOffset.y),
-        newHeight - textBoxSize.height
-      );
-
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(clampedX, clampedY, textBoxSize.width, textBoxSize.height);
-
-      ctx.font = "16px sans-serif";
-      ctx.fillStyle = "#fff";
-      ctx.textBaseline = "top";
-      const lines = text.split("\n");
-
-      lines.forEach((line, i) => {
-        ctx.fillText(line, clampedX + 10, clampedY + 10 + i * 20);
-      });
-
-      if (clampedX !== dragOffset.x || clampedY !== dragOffset.y) {
-        setDragOffset({ x: clampedX, y: clampedY });
-      }
-    };
-  }, [imageUrl, text, dragOffset, textBoxSize]);
-
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const startX = e.nativeEvent.offsetX;
-    const startY = e.nativeEvent.offsetY;
-
-    const initialX = dragOffset.x;
-    const initialY = dragOffset.y;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dx = moveEvent.offsetX - startX;
-      const dy = moveEvent.offsetY - startY;
-
-      setDragOffset({
-        x: initialX + dx,
-        y: initialY + dy,
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  };
-
-  const handleDownload = () => {
-    if (!canvasRef.current) return;
-    setIsProcessing(true);
-    try {
-      const link = document.createElement("a");
-      link.download = `post-${id}-memo.png`;
-      link.href = canvasRef.current.toDataURL("image/png");
-      link.click();
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  useEffect(() => {
+    drawOnCanvas(canvasRef.current);
+  }, [text, textBoxSize, dragOffset, drawOnCanvas]);
 
   return (
     <main className="max-w-md mx-auto p-4 text-black bg-white">
@@ -139,14 +38,14 @@ export default function EditImagePage() {
       <div className="mb-4 flex flex-col items-center">
         <canvas
           ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
+          onMouseDown={bindCanvasDrag}
           className="border w-[300px] h-auto"
         />
       </div>
 
       <textarea
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={(e) => setText(e.target.value)}
         rows={4}
         className="w-full border p-2 rounded mb-4"
         disabled={isProcessing}
@@ -156,26 +55,18 @@ export default function EditImagePage() {
         <label className="flex items-center gap-2">
           幅:
           <input
-            type="range"
-            min={100}
-            max={260}
+            type="range" min={100} max={260}
             value={textBoxSize.width}
-            onChange={e =>
-              setTextBoxSize(size => ({ ...size, width: Number(e.target.value) }))
-            }
+            onChange={(e) => setTextBoxSize(s => ({ ...s, width: Number(e.target.value) }))}
             disabled={isProcessing}
           />
         </label>
         <label className="flex items-center gap-2">
           高さ:
           <input
-            type="range"
-            min={50}
-            max={500}
+            type="range" min={50} max={500}
             value={textBoxSize.height}
-            onChange={e =>
-              setTextBoxSize(size => ({ ...size, height: Number(e.target.value) }))
-            }
+            onChange={(e) => setTextBoxSize(s => ({ ...s, height: Number(e.target.value) }))}
             disabled={isProcessing}
           />
         </label>
@@ -183,7 +74,7 @@ export default function EditImagePage() {
 
       <div className="text-center">
         <button
-          onClick={handleDownload}
+          onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-memo.png`)}
           className="bg-black text-white px-4 py-2 rounded"
           disabled={isProcessing}
         >
