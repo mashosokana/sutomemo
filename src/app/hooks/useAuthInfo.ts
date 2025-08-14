@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import { useSupabaseClient, useSession, useUser } from "@supabase/auth-helpers-react";
 
+function getRole(meta: unknown): string | undefined {
+  if (!meta || typeof meta !== "object") return undefined;
+  const rec = meta as Record<string, unknown>;
+  const r = rec.role;
+  return typeof r === "string" ? r : undefined;
+}
+
 export function useAuthInfo() {
   const supabase = useSupabaseClient();
-  const session = useSession();             // Session | null
-  const user = useUser();                   // User | null
+  const session = useSession(); 
+  const user = useUser();       
   const [token, setToken] = useState<string | null>(session?.access_token ?? null);
 
   useEffect(() => {
@@ -20,20 +27,19 @@ export function useAuthInfo() {
       setToken(session.access_token ?? null);
     }
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_e, s) => {
       if (mounted) setToken(s?.access_token ?? null);
     });
 
     return () => {
       mounted = false;
-      sub?.subscription.unsubscribe();
+      authListener?.subscription.unsubscribe();
     };
   }, [session, supabase]);
 
-  const isGuest =
-    (user?.app_metadata as any)?.role === "guest" ||
-    (user?.user_metadata as any)?.role === "guest" ||
-    false;
+  const role = getRole(user?.app_metadata) ?? getRole(user?.user_metadata);
+  const isGuest = role === "guest";
 
   return { token, isGuest };
 }
+
