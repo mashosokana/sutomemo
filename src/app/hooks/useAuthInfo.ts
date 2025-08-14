@@ -1,8 +1,10 @@
 // src/app/hooks/useAuthInfo.ts
 "use client";
-import { useEffect, useState } from "react";
-import { useSupabaseClient, useSession, useUser } from "@supabase/auth-helpers-react";
 
+import { useEffect, useMemo, useState } from "react";
+import { createClientComponentClient, type Session } from "@supabase/auth-helpers-nextjs";
+
+/** any を使わず安全に role を取り出す */
 function getRole(meta: unknown): string | undefined {
   if (!meta || typeof meta !== "object") return undefined;
   const rec = meta as Record<string, unknown>;
@@ -11,35 +13,39 @@ function getRole(meta: unknown): string | undefined {
 }
 
 export function useAuthInfo() {
-  const supabase = useSupabaseClient();
-  const session = useSession(); 
-  const user = useUser();       
-  const [token, setToken] = useState<string | null>(session?.access_token ?? null);
+  // Provider不要のクライアント（App Router推奨）
+  const supabase = useMemo(() => createClientComponentClient(), []);
+  const [token, setToken] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    if (!session) {
-      supabase.auth.getSession().then(({ data }) => {
-        if (mounted) setToken(data.session?.access_token ?? null);
-      });
-    } else {
-      setToken(session.access_token ?? null);
-    }
+    // 初期取得
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const session: Session | null = data.session;
+      setToken(session?.access_token ?? null);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (mounted) setToken(s?.access_token ?? null);
+      const role =
+        getRole(session?.user?.app_metadata) ?? getRole(session?.user?.user_metadata);
+      setIsGuest(role === "guest");
+    });
+
+    // 変更を購読
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (!mounted) return;
+      setToken(s?.access_token ?? null);
+
+      const role = getRole(s?.user?.app_metadata) ?? getRole(s?.user?.user_metadata);
+      setIsGuest(role === "guest");
     });
 
     return () => {
       mounted = false;
-      authListener?.subscription.unsubscribe();
+      sub.subscription.unsubscribe();
     };
-  }, [session, supabase]);
-
-  const role = getRole(user?.app_metadata) ?? getRole(user?.user_metadata);
-  const isGuest = role === "guest";
+  }, [supabase]);
 
   return { token, isGuest };
 }
-
