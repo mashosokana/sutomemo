@@ -3,6 +3,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuthInfo } from "./useAuthInfo"; 
 
 export type FontSize = "small" | "medium" | "large";
 
@@ -27,12 +28,9 @@ function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 300) {
   };
 }
 
-export function useImageOverlayEditor(opts: {
-  postId: number;
-  token: string | null | undefined;
-  isGuest?: boolean;
-}) {
-  const { postId, token, isGuest = false } = opts;
+export function useImageOverlayEditor(opts: { postId: number }) {
+  const { postId } = opts;
+  const { token, isGuest } = useAuthInfo();
 
   // 画面状態
   const [text, setText] = useState("");

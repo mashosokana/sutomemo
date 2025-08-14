@@ -54,7 +54,7 @@ export async function DELETE(
     await prisma.image.delete({ where: { id: imageId } });
 
     const remainingImages = await prisma.image.findMany({
-      where: { postId },
+      where: { postId, post: { userId: user.id } },
       orderBy: { id: "asc" },
     });
 
