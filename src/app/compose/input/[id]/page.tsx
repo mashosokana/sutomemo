@@ -66,7 +66,7 @@ export default function EditPage({ params }: EditPageProps) {
   if (!post) return <main className="p-6">投稿が見つかりません</main>;
 
   return (
-    <main className="max-w-xl mx-auto p-6">
+    <main className="max-w-xl mx-auto p-6 bg-white text-black min-h-screen">
       <h1 className="text-2xl font-bold mb-6">保存の編集</h1>
       <EditForm  id={postId} />
     </main>

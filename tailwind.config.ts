@@ -1,5 +1,6 @@
-// tailwind.config.js
+// tailwind.config.ts
 import type { Config } from "tailwindcss";
+import lineClamp from "@tailwindcss/line-clamp"; 
 
 const config: Config = {
   content: [
@@ -12,31 +13,25 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-
-        primary:  "#000000",   // 黒ベタボタン & 見出し
-        accent:   "#1E90FF",   // ダウンロードなど青
-        ivory:    "#FFF4E2",
-        card:     "#FFFFFF",   // 投稿カード背景
+        primary: "#000000",
+        accent: "#1E90FF",
+        ivory: "#FFF4E2",
+        card: "#FFFFFF",
       },
-      
-      extend: {
-        fontFamily: {
-          sans: ['"Noto Sans JP"', 'sans-serif'], // ← 先頭が Noto なら OK
-        },
+      fontFamily: {
+        sans: ['"Noto Sans JP"', 'sans-serif'],
       },
-      
       maxWidth: {
-        phone: "375px",        // スマホ幅固定
+        phone: "375px",
       },
-      
       borderRadius: {
         md: "4px",
       },
     },
   },
-  plugins: [],
+  plugins: [
+    lineClamp, 
+  ],
 };
+
 export default config;
-        
-    
-      

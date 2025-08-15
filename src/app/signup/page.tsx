@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -13,11 +14,24 @@ export default function SignUpPage() {
 
   const router = useRouter()
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const isValidPassword = (password: string): boolean => {
+    const hasMinLength = password.length >= 8
+    const hasLetter = /[a-zA-Z]/.test(password)
+    const hasNumber = /[0-9]/.test(password)
+    const hasSymbol = /[@$!%*#?&]/.test(password)
+    return hasMinLength && hasLetter && hasNumber && hasSymbol
+  }
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
     setErrorMessage('')
     setLoading(true)
+
+    if (!isValidPassword(password)) {
+      setErrorMessage('パスワードは8文字以上かつ、英字・数字・記号（@$!%*#?&）を含めてください。')
+      setLoading(false)
+      return
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email, 
@@ -40,58 +54,71 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className='flex justify-center pt-[240px]'>
-      <form onSubmit={handleSubmit} className='space-y-4 w-full max-w-[400px]'>
-        <div>
-          <label
-            htmlFor='email'
-            className='block mb-2 text-sm font-medium text-gray-900'
-          >
-            メールアドレス
-          </label>
-          <input
-            type='email'
-            name='email'
-            id='email'
-            className='bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5'
-            placeholder='name@company.com'
-            required
-            onChange={(e) => setEmail(e.target.value)}
-            value={email}
-          />
-        </div>
-        <div>
-          <label
-            htmlFor='password'
-            className='block mb-2 text-sm font-medium text-gray-900'
-          >
-            パスワード
-          </label>
-          <input
-            type='password'
-            name='password'
-            id='password'
-            placeholder='••••••••'
-            className='bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5'
-            required
-            onChange={(e) => setPassword(e.target.value)}
-            value={password}
-          />
-        </div>
-          <p className='text-red-500 text-sm text-center'>
-            {errorMessage && `エラー: ${errorMessage}`}
-          </p>
+    <main className='min-h-screen flex items-center justify-center bg-gray-100 px-4'>
+      <div className='w-full max-w-md bg-white rounded-2xl shadow-lg p-8'>
+        <h1 className='text-2xl font-bold mb-6 text-center'>新規登録</h1>
+        <form onSubmit={handleSubmit} className='space-y-5'>
+          <div>
+            <label htmlFor='email' className='block mb-2 text-sm font-medium text-gray-700'>
+              メールアドレス
+            </label>
+            <input
+              type='email'
+              id='email'
+              className='block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500'
+              placeholder='name@example.com'
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
 
-        <div>
+          <div>
+            <label htmlFor='password' className='block mb-2 text-sm font-medium text-gray-700'>
+              パスワード
+            </label>
+            <input
+              type='password'
+              id='password'
+              className='block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-black'
+              placeholder='••••••••'
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          {errorMessage && (
+            <p className='text-red-500 text-sm text-center'>
+              エラー: {errorMessage}
+            </p>
+          )}
+
           <button
             type='submit'
+            className='w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50'
             disabled={loading}
-            className='w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center disabled:opacity-50'
           >
             {loading ? '登録中...' : '登録'}
           </button>
-        </div>
-      </form>
-    </div>
+
+          <div className='text-sm text-gray-600 mt-4'>
+            <p className='font-semibold text-gray-800 mb-1'>注意</p>
+            <ul className='list-disc list-inside space-y-1'>
+            <li>8文字以上</li>
+              <li>アルファベットを含む</li>
+              <li>数字を含む</li>
+              <li>記号（@ $ ! % * # ? &）を含む</li>
+            </ul>
+          </div>
+          <p className='text-sm text-center text-gray-600 mt-6'>
+            アカウントをお持ちの方は{' '}
+            <Link href='/login' className='text-blue-600 hover:underline font-medium'>
+              ログイン
+            </Link>
+          </p>
+        </form>
+      </div>
+    </main>
   )
 }
