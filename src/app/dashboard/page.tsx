@@ -16,7 +16,7 @@ type MemoType = {
 type ImageData = {
   id: number;
   imageKey: string;
-  signedUrl: string; 
+  signedUrl?: string; 
 };
 
 type PostType = {
@@ -24,7 +24,7 @@ type PostType = {
   caption: string;
   memo: MemoType | null;
   createdAt: string;
-  imageUrl?: string | null; 
+  imageUrl?: string; 
   images?: ImageData[];     
 };
 

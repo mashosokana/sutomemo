@@ -3,6 +3,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; 
+
+const SIGNED_URL_TTL = 60 * 60; // 1h
+
+const nonEmpty = (v?: string | null) => (v && v.trim() !== "" ? v : undefined);
+
+function isGuestUser(email?: string | null): boolean {
+  const a = email?.toLowerCase() ?? "";
+  const b = (process.env.GUEST_USER_EMAIL ?? "").toLowerCase();
+  return a === b;
+}
+
 async function getAuthUser(req: Request) {
   const authHeader = req.headers.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
@@ -12,10 +25,15 @@ async function getAuthUser(req: Request) {
   return { user: data.user, status: 200 as const, error: null };
 }
 
+
 export async function POST(req: Request) {
   try {
     const { user, status, error } = await getAuthUser(req);
     if (!user) return NextResponse.json({ error }, { status });
+
+    if (isGuestUser(user.email)) {
+      return NextResponse.json({ error: "ゲストユーザーは新規作成できません" }, { status: 403 });
+    }
 
     const body = await req.json().catch(() => null);
     const caption: unknown = body?.caption;
@@ -24,6 +42,7 @@ export async function POST(req: Request) {
     if (typeof caption !== "string" || caption.trim().length === 0) {
       return NextResponse.json({ error: "captionは必須です" }, { status: 400 });
     }
+
     type MemoPayload = { answerWhy?: unknown; answerWhat?: unknown; answerNext?: unknown };
     const { answerWhy, answerWhat, answerNext } = (memo ?? {}) as MemoPayload;
 
@@ -57,6 +76,7 @@ export async function POST(req: Request) {
   }
 }
 
+
 export async function GET(req: Request) {
   try {
     const { user, status, error } = await getAuthUser(req);
@@ -65,36 +85,43 @@ export async function GET(req: Request) {
     const posts = await prisma.post.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      include: { 
-        memo: true, 
-        images: { orderBy: {generatedAt: "desc"} },
+      include: {
+        memo: true,
+        images: { orderBy: { generatedAt: "desc" } },
       },
     });
 
     const postsWithSignedUrls = await Promise.all(
       posts.map(async (post) => {
-        const nonHeic = post.images.filter(img => !/\.hei(c|f)$/i.test(img.imageKey));
+        const nonHeic = post.images.filter((img) => !/\.hei(c|f)$/i.test(img.imageKey));
+
         const signedImages = await Promise.all(
           nonHeic.map(async (img) => {
-            const { data: signed, error: signedError } = await supabaseAdmin
+            const { data, error: signedError } = await supabaseAdmin
               .storage
               .from("post-images")
-              .createSignedUrl(img.imageKey, 60 * 60); // 1時間
+              .createSignedUrl(img.imageKey, SIGNED_URL_TTL);
+
             if (signedError) {
               console.warn(`Signed URL creation failed: ${signedError.message}`);
             }
-            return { id: img.id, imageKey: img.imageKey, signedUrl: signed?.signedUrl ?? "" };
+
+            return {
+              id: img.id,
+              imageKey: img.imageKey,
+              signedUrl: nonEmpty(data?.signedUrl),
+            };
           })
         );
 
-        const imageUrl = signedImages[0]?.signedUrl ?? null;
+        const imageUrl = nonEmpty(signedImages[0]?.signedUrl);
 
         return {
           id: post.id,
           caption: post.caption,
           createdAt: post.createdAt,
           memo: post.memo,
-          imageUrl, 
+          ...(imageUrl ? { imageUrl } : {}), 
           images: signedImages,
         };
       })
