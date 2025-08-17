@@ -29,6 +29,7 @@ model Post {
   images    Image[]
   memo      Memo?
   user      User       @relation(fields: [userId], references: [id])
+  thumbnailImageKey  String?
 }
 
 model Memo {

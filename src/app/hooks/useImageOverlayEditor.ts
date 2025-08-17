@@ -1,244 +1,305 @@
-//src/app/posts/hooks/useImageOverlayEditor.ts
+// src/app/hooks/useImageOverlayEditor.ts
+'use client';
 
-"use client";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuthInfo } from "./useAuthInfo"; 
+type Point = { x: number; y: number };
+type TextBoxSize = { width: number; height: number };
+type ApiImage = { signedUrl?: string | null };
 
-export type FontSize = "small" | "medium" | "large";
-
-export type OverlaySettings = {
+type UseImageOverlayEditorArgs = { postId: number };
+type UseImageOverlayEditorReturn = {
   text: string;
-  fontSize: FontSize;
-  textBoxSize: { width: number; height: number };
-  dragOffset: { x: number; y: number };
+  setText: (v: string) => void;
+  textBoxSize: TextBoxSize;
+  setTextBoxSize: (updater: (s: TextBoxSize) => TextBoxSize) => void;
+  dragOffset: Point;
+  isProcessing: boolean;
+
+  initFromPost: () => Promise<void>;
+  drawOnCanvas: (canvas: HTMLCanvasElement | null) => Promise<void>;
+  bindCanvasDrag: (e: ReactMouseEvent<HTMLCanvasElement>) => void;
+  downloadCanvas: (canvas: HTMLCanvasElement | null, filename: string) => void;
+  previewLocalFile: (file: File) => Promise<void>;
 };
 
-export type PostImageLike = {
-  id: number;
-  imageKey: string;
-  signedUrl: string | null | undefined;
-};
+/* ---------------- 型ガード & ユーティリティ ---------------- */
 
-function debounce<A extends unknown[]>(fn: (...args: A) => void, ms = 300) {
-  let t: ReturnType<typeof setTimeout>;
-  return (...args: A) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+function asNonEmptyString(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function extractImages(obj: Record<string, unknown>): ApiImage[] {
+  const raw = obj['images'];
+  if (!Array.isArray(raw)) return [];
+  const out: ApiImage[] = [];
+  for (const item of raw) {
+    if (isRecord(item)) {
+      const su = item['signedUrl'];
+      if (typeof su === 'string') out.push({ signedUrl: su });
+      else if (su == null) out.push({ signedUrl: null });
+      else out.push({});
+    }
+  }
+  return out;
+}
+
+function extractMemoText(memoLike: unknown): string {
+  if (!isRecord(memoLike)) return '';
+  const keys = ['text', 'body', 'content', 'answerWhy', 'answerWhat', 'answerNext'] as const;
+  const parts: string[] = [];
+  for (const k of keys) {
+    const v = memoLike[k as keyof typeof memoLike];
+    if (typeof v === 'string' && v.trim().length > 0) parts.push(v.trim());
+  }
+  return parts.join('\n');
+}
+
+/** /api/posts/[id] の返却が { post: {...} } でもフラットでも対応 */
+function normalizePost(data: unknown): {
+  imageUrl?: string;
+  caption?: string;
+  memoText?: string;
+} {
+  const root: Record<string, unknown> =
+    isRecord(data) && isRecord((data as Record<string, unknown>)['post'])
+      ? ((data as Record<string, unknown>)['post'] as Record<string, unknown>)
+      : isRecord(data)
+      ? (data as Record<string, unknown>)
+      : {};
+
+  const imageUrl = asNonEmptyString(root['imageUrl']);
+
+  const images = extractImages(root);
+  const signed = images.find((i) => typeof i.signedUrl === 'string')?.signedUrl;
+
+  const caption = asNonEmptyString(root['caption']);
+
+  const memoCandidate =
+    root['memo'] ?? root['postMemo'] ?? root['memoData'];
+  const memoText = extractMemoText(memoCandidate);
+
+  return {
+    imageUrl: imageUrl ?? signed ?? undefined,
+    caption,
+    memoText,
   };
 }
 
-export function useImageOverlayEditor(opts: { postId: number }) {
-  const { postId } = opts;
-  const { token, isGuest } = useAuthInfo();
+/** CORS 安全な画像ロード */
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.referrerPolicy = 'no-referrer';
+    img.decoding = 'async';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image load error: ' + url));
+    img.src = url;
+  });
+}
 
-  // 画面状態
-  const [text, setText] = useState("");
-  const [fontSize, setFontSize] = useState<FontSize>("medium");
-  const [textBoxSize, setTextBoxSize] = useState({ width: 260, height: 120 });
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [image, setImage] = useState<PostImageLike | null>(null);
+/** 簡易改行なし描画（必要なら wrap を後で拡張） */
+function wrapLines(text: string): string[] {
+  return text.split('\n');
+}
+
+/* ---------------- Hook 本体 ---------------- */
+
+export function useImageOverlayEditor({ postId }: UseImageOverlayEditorArgs): UseImageOverlayEditorReturn {
+  const { token } = useSupabaseSession();
+
+  const [baseImageUrl, setBaseImageUrl] = useState<string | null>(null);
+  const baseImageRef = useRef<HTMLImageElement | null>(null);
+
+  const [text, setText] = useState<string>('');
+  const [textBoxSize, _setTextBoxSize] = useState<TextBoxSize>({ width: 220, height: 120 });
+  const [overlayPos, setOverlayPos] = useState<Point>({ x: 20, y: 20 });
+  const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const draggingRef = useRef(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1) ローカル保存のキー
-  const storageKey = useMemo(() => `post:${postId}:edit`, [postId]);
-  const hasLocalOverride = useRef(false);
+  const lastCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const localObjectUrlRef = useRef<string | null>(null);
 
-  // 2) 復元
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Partial<OverlaySettings>;
-      let restored = false;
-      if (saved.text != null) { setText(saved.text); restored = true; }
-      if (saved.fontSize) { setFontSize(saved.fontSize); restored = true; }
-      if (saved.textBoxSize) { setTextBoxSize(saved.textBoxSize); restored = true; }
-      if (saved.dragOffset) { setDragOffset(saved.dragOffset); restored = true; }
-      if (restored) hasLocalOverride.current = true;
-    } catch (e) {
-      console.warn("restore failed", e);
-    }
-  }, [storageKey]);
+  const setTextBoxSize = useCallback((updater: (s: TextBoxSize) => TextBoxSize) => {
+    _setTextBoxSize((prev) => updater(prev));
+  }, []);
 
-  // 3) 保存
-  const persist = useRef(
-    debounce((s: OverlaySettings) => {
-      localStorage.setItem(storageKey, JSON.stringify(s));
-    }, 300)
-  ).current;
-
-  useEffect(() => {
-    persist({ text, fontSize, textBoxSize, dragOffset });
-  }, [text, fontSize, textBoxSize, dragOffset, persist]);
-
-  // 4) 投稿取得→初期テキスト&画像
   const initFromPost = useCallback(async () => {
-    if (!token || isNaN(postId) || isGuest) return;
-
-    const res = await fetch(`/api/posts/${postId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return;
-
-    const data = await res.json();
-    const post = data.post as {
-      caption?: string;
-      memo?: { answerWhy?: string; answerWhat?: string; answerNext?: string };
-      images?: Array<PostImageLike>;
-    };
-
-    // 初期テキスト
-    const combinedText = [
-      post.caption,
-      post.memo?.answerWhy,
-      post.memo?.answerWhat,
-      post.memo?.answerNext,
-    ].filter(Boolean).join("\n\n");
-    if (!hasLocalOverride.current) setText(combinedText);
-
-    // 画像
-    const imgs = (post.images ?? []).filter(i => i?.signedUrl);
-    const picked = imgs[0] ?? null; 
-    setImage(picked);
-  }, [postId, token, isGuest]);
-
-  // 5) キャンバス描画関数
-  const drawOnCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !image?.signedUrl) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = image.signedUrl;
-
-    img.onload = () => {
-      const width = 300; 
-      const scale = width / img.width;
-      const height = img.height * scale;
-
-      canvas.width = width;
-      canvas.height = height;
-
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-
-      const clampedX = Math.min(Math.max(0, dragOffset.x), width - textBoxSize.width);
-      const clampedY = Math.min(Math.max(0, dragOffset.y), height - textBoxSize.height);
-
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(clampedX, clampedY, textBoxSize.width, textBoxSize.height);
-
-      let px = 14;
-      if (fontSize === "small") px = 12;
-      if (fontSize === "large") px = 18;
-      ctx.font = `${px}px sans-serif`;
-      ctx.fillStyle = "#fff";
-      ctx.textBaseline = "top";
-
-      text.split("\n").forEach((line, i) => {
-        ctx.fillText(line, clampedX + 10, clampedY + 10 + i * (px + 4));
-      });
-
-      // はみ出し補正を状態へ反映
-      if (clampedX !== dragOffset.x || clampedY !== dragOffset.y) {
-        setDragOffset({ x: clampedX, y: clampedY });
-      }
-    };
-
-    img.onerror = (ev) => {
-      console.error("Image load error", { src: image.signedUrl, ev });
-    };
-  }, [image, text, textBoxSize, dragOffset, fontSize]);
-
-  const bindCanvasDrag = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const startX = e.nativeEvent.offsetX;
-    const startY = e.nativeEvent.offsetY;
-    const initialX = dragOffset.x;
-    const initialY = dragOffset.y;
-  
-    const handleMove = (moveEvent: MouseEvent) => {
-      const { offsetX, offsetY } = moveEvent; 
-      const dx = offsetX - startX;
-      const dy = offsetY - startY;
-      setDragOffset({ x: initialX + dx, y: initialY + dy });
-    };
-  
-    const handleUp = () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-  }, [dragOffset]);
-
-  // 7) 画像アップロード
-  const uploadImage = useCallback(async (file: File, options: {
-    currentImageKey?: string | null;
-  } = {}) => {
-    if (!token) return null;
+    if (!token) return;
     setIsProcessing(true);
     try {
-      if (options.currentImageKey) {
-        await fetch(`/api/posts/${postId}/images`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ imageKey: options.currentImageKey }),
-        });
+      const res = await fetch(`/api/posts/${postId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`GET /api/posts/${postId} failed (${res.status})`);
+      const raw: unknown = await res.json();
+
+      const { imageUrl, caption, memoText } = normalizePost(raw);
+
+      // 画像URLが得られたときのみ差し替える（得られない場合は現状維持）
+      if (imageUrl) {
+        if (localObjectUrlRef.current) {
+          URL.revokeObjectURL(localObjectUrlRef.current);
+          localObjectUrlRef.current = null;
+        }
+        setBaseImageUrl(imageUrl);
+        baseImageRef.current = null;
+      } else {
+        // console.warn('No image url from server; keep current canvas image.');
       }
 
-      const fd = new FormData();
-      fd.append("image", file);
-
-      const res = await fetch(`/api/posts/${postId}/images`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      const uploaded = data.image as PostImageLike | undefined;
-      if (uploaded?.signedUrl) setImage(uploaded);
-      return uploaded ?? null;
+      const seed = (memoText && memoText.trim()) || caption || '';
+      setText((prev) => (prev.trim().length > 0 ? prev : seed));
+    } catch (e) {
+      console.error('initFromPost error:', e);
     } finally {
       setIsProcessing(false);
     }
   }, [postId, token]);
 
-  // 8) ダウンロード
+  const drawOnCanvas = useCallback(
+    async (canvas: HTMLCanvasElement | null) => {
+      lastCanvasRef.current = canvas;
+      if (!canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      if (!baseImageUrl) {
+        canvas.width = 300;
+        canvas.height = 180;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return;
+      }
+
+      try {
+        if (!baseImageRef.current) {
+          baseImageRef.current = await loadImage(baseImageUrl);
+        }
+        const img = baseImageRef.current;
+
+        const maxW = 300;
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+
+        canvas.width = w;
+        canvas.height = h;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // メモボックス
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.fillRect(overlayPos.x, overlayPos.y, textBoxSize.width, textBoxSize.height);
+
+        // テキスト描画（シンプルに行ごと）
+        ctx.fillStyle = 'black';
+        ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+        ctx.textBaseline = 'top';
+        const pad = 8;
+        let y = overlayPos.y + pad;
+        for (const line of wrapLines(text)) {
+          ctx.fillText(line, overlayPos.x + pad, y);
+          y += 20;
+          if (y > overlayPos.y + textBoxSize.height - pad) break;
+        }
+      } catch (e) {
+        console.error('drawOnCanvas error:', e);
+      }
+    },
+    [baseImageUrl, overlayPos.x, overlayPos.y, text, textBoxSize.height, textBoxSize.width]
+  );
+
+  useEffect(() => {
+    if (lastCanvasRef.current) void drawOnCanvas(lastCanvasRef.current);
+  }, [baseImageUrl, drawOnCanvas]);
+
+  const bindCanvasDrag = useCallback((e: ReactMouseEvent<HTMLCanvasElement>) => {
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const start: Point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    setDragOffset(start);
+    draggingRef.current = true;
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const r = canvas.getBoundingClientRect();
+      const pos: Point = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+      const dx = pos.x - start.x;
+      const dy = pos.y - start.y;
+      setOverlayPos((p) => ({ x: Math.max(0, p.x + dx), y: Math.max(0, p.y + dy) }));
+    };
+
+    const onUp = () => {
+      draggingRef.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
   const downloadCanvas = useCallback((canvas: HTMLCanvasElement | null, filename: string) => {
     if (!canvas) return;
-    setIsProcessing(true);
-    try {
-      const a = document.createElement("a");
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
       a.download = filename;
-      a.href = canvas.toDataURL("image/png");
+      document.body.appendChild(a);
       a.click();
-    } finally {
-      setIsProcessing(false);
+      a.remove();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, []);
+
+  const previewLocalFile = useCallback(async (file: File) => {
+    if (localObjectUrlRef.current) {
+      URL.revokeObjectURL(localObjectUrlRef.current);
+      localObjectUrlRef.current = null;
     }
+    const url = URL.createObjectURL(file);
+    localObjectUrlRef.current = url;
+
+    setBaseImageUrl(url);
+    baseImageRef.current = null;
+    if (lastCanvasRef.current) await drawOnCanvas(lastCanvasRef.current);
+  }, [drawOnCanvas]);
+
+  useEffect(() => {
+    return () => {
+      if (localObjectUrlRef.current) {
+        URL.revokeObjectURL(localObjectUrlRef.current);
+        localObjectUrlRef.current = null;
+      }
+    };
   }, []);
 
   return {
-    // state
-    text, setText,
-    fontSize, setFontSize,
-    textBoxSize, setTextBoxSize,
-    dragOffset, setDragOffset,
-    image, setImage,
-    isProcessing, setIsProcessing,
-
-    // actions
+    text,
+    setText,
+    textBoxSize,
+    setTextBoxSize,
+    dragOffset,
+    isProcessing,
     initFromPost,
     drawOnCanvas,
     bindCanvasDrag,
-    uploadImage,
     downloadCanvas,
+    previewLocalFile,
   };
 }
+
+export default useImageOverlayEditor;

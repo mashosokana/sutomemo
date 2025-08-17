@@ -1,11 +1,15 @@
+// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['vaboszqtrcvhxsxezlvz.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'vaboszqtrcvhxsxezlvz.supabase.co',
+        pathname: '/storage/v1/object/**',
+      },
+    ],
   },
 };
 
 export default nextConfig;
-
-
-
