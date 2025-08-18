@@ -6,20 +6,16 @@ import { useParams } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
-import { useUploadThumbnail } from "@/app/hooks/useUploadThumbnail";
 
 export default function PostDetailPage() {
-
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
-
   const { token, session } = useSupabaseSession();
   const isGuest =
     (session?.user?.email ?? '').trim().toLowerCase() ===
     (process.env.NEXT_PUBLIC_GUEST_USER_EMAIL ?? 'guest@example.com').trim().toLowerCase();
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const {
     text, setText,
     textBoxSize, setTextBoxSize,
@@ -30,21 +26,16 @@ export default function PostDetailPage() {
     bindCanvasDrag,
     downloadCanvas,
     previewLocalFile,
+    fontSize,
+    setFontSize,
   } = useImageOverlayEditor({ postId });
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
 
-  const { uploadThumbnail } = useUploadThumbnail(postId);
-
-  useEffect(() => {
-    void initFromPost();
-  }, [initFromPost]);
-
-  useEffect(() => {
-    void drawOnCanvas(canvasRef.current);
-  }, [text, textBoxSize, dragOffset, drawOnCanvas]);
+  useEffect(() => { initFromPost(); }, [initFromPost]);
+  useEffect(() => { void drawOnCanvas(canvasRef.current); }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
@@ -56,12 +47,8 @@ export default function PostDetailPage() {
     setUploadDoneMsg(null);
 
     try {
-      let thumbnailSaved = false;
-
       for (const file of files) {
-
-        previewLocalFile(file);
-
+        void previewLocalFile(file);
 
         const fd = new FormData();
         fd.append('file', file);
@@ -74,14 +61,7 @@ export default function PostDetailPage() {
           const data = await res.json().catch(() => ({}));
           throw new Error((data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`);
         }
-
-
-        if (!thumbnailSaved) {
-          await uploadThumbnail(file);
-          thumbnailSaved = true;
-        }
       }
-
       setUploadDoneMsg('画像をアップロードしました');
       await initFromPost();
     } catch (e: unknown) {
@@ -128,7 +108,7 @@ export default function PostDetailPage() {
           placeholder="ここにテキストを入力（caption/memo を自動復元）"
         />
 
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
           <label className="flex items-center gap-2">
             幅:
             <input
@@ -136,8 +116,10 @@ export default function PostDetailPage() {
               value={textBoxSize.width}
               onChange={(e) => setTextBoxSize(s => ({ ...s, width: Number(e.target.value) }))}
               disabled={isProcessing || isUploading}
+              className="w-full"
             />
           </label>
+
           <label className="flex items-center gap-2">
             高さ:
             <input
@@ -145,7 +127,22 @@ export default function PostDetailPage() {
               value={textBoxSize.height}
               onChange={(e) => setTextBoxSize(s => ({ ...s, height: Number(e.target.value) }))}
               disabled={isProcessing || isUploading}
+              className="w-full"
             />
+          </label>
+
+          <label className="flex items-center gap-2">
+            文字サイズ:
+            <select
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              disabled={isProcessing || isUploading}
+              className="border rounded px-2 py-1 text-sm w-full sm:w-auto"
+            >
+              {Array.from({ length: 18 - 9 + 1 }, (_, i) => 9 + i).map((n) => (
+                <option key={n} value={n}>{n}px</option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -160,3 +157,4 @@ export default function PostDetailPage() {
     </main>
   );
 }
+

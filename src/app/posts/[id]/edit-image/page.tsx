@@ -67,7 +67,7 @@ export default function EditImagePage() {
       }
       setSelectedFiles([]);
       setUploadDoneMsg('画像をアップロードしました');
-      await initFromPost(); // 新しい signedUrl を反映 → キャンバスへ表示
+      await initFromPost(); 
     } catch (e: unknown) {
       setUploadError(e instanceof Error ? e.message : String(e));
     } finally {

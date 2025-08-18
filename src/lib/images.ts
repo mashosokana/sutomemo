@@ -1,5 +1,6 @@
 // src/lib/images.ts
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { THUMB_BUCKET } from "@/lib/buckets"; // ← パスを統一
 
 export type TransformOpt = {
   width?: number;
@@ -40,7 +41,7 @@ export function getPublicThumbUrl(
   };
 
   const { data } = supabaseAdmin.storage
-    .from("post_thumbnail")
+    .from(THUMB_BUCKET)
     .getPublicUrl(key, options);
 
   return data.publicUrl ?? undefined;
