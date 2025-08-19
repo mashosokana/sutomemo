@@ -9,10 +9,23 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  user
+  admin
+}
+
+enum PostStatus {
+  draft
+  published
+  archived
+  deleted
+}
+
 model User {
   id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique 
-  password  String   
+  email     String   @unique
+  // Supabaseで管理するため任意化。どうしても必須のままにしたい場合は default("") を付ける
+  password  String?  
   role      Role     @default(user)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -20,16 +33,16 @@ model User {
 }
 
 model Post {
-  id        Int        @id @default(autoincrement())
-  userId    String     @db.Uuid
-  caption   String
-  status    PostStatus @default(draft)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  images    Image[]
-  memo      Memo?
-  user      User       @relation(fields: [userId], references: [id])
+  id                 Int        @id @default(autoincrement())
+  userId             String     @db.Uuid
+  caption            String
+  status             PostStatus @default(draft)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  images             Image[]
+  memo               Memo?
   thumbnailImageKey  String?
+  user               User       @relation(fields: [userId], references: [id])
 }
 
 model Memo {
@@ -50,16 +63,4 @@ model Image {
   generatedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
   post        Post     @relation(fields: [postId], references: [id])
-}
-
-enum Role {
-  user
-  admin
-}
-
-enum PostStatus {
-  draft
-  published
-  archived
-  deleted
 }

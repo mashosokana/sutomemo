@@ -1,28 +1,17 @@
-import { NextResponse } from "next/server";
+// src/app/api/admin/guest-posts/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma } from "@prisma/client";
+import { requireUserOrThrow, assertAdminOrThrow } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function getAuthUser(req: Request) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-  if (!token) return { user: null, status: 401 as const, error: "Unauthorized" };
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return { user: null, status: 401 as const, error: "Unauthorized" };
-  return { user: data.user, status: 200 as const, error: null };
-}
-
-function isAdminUser(email?: string | null): boolean {
-  const a = (email ?? "").trim().toLowerCase();
-  const b = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
-  return !!b && a === b;
-}
-
-// クエリから対象指定を作る（email優先、無ければuserId、さらに無ければ.envのGUEST_USER_EMAIL）
-function buildTargetWhere(urlStr: string): { where: Prisma.PostWhereInput; target: { email?: string; userId?: string } } {
+function buildTargetWhere(urlStr: string): {
+  where: Prisma.PostWhereInput;
+  target: { email?: string; userId?: string };
+} {
   const url = new URL(urlStr);
   const qEmail = (url.searchParams.get("email") ?? "").trim().toLowerCase();
   const qUserId = (url.searchParams.get("userId") ?? "").trim();
@@ -31,17 +20,14 @@ function buildTargetWhere(urlStr: string): { where: Prisma.PostWhereInput; targe
   if (qEmail) return { where: { user: { email: qEmail } }, target: { email: qEmail } };
   if (qUserId) return { where: { userId: qUserId }, target: { userId: qUserId } };
   if (envEmail) return { where: { user: { email: envEmail } }, target: { email: envEmail } };
-  // fallback: 何も指定なし
-  return { where: { id: -1 }, target: {} }; // ヒットしない where
+  return { where: { id: -1 }, target: {} }; 
 }
 
-export async function GET(req: Request) {
-  const { user, status, error } = await getAuthUser(req);
-  if (!user) return NextResponse.json({ error }, { status });
-  if (!isAdminUser(user.email)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+export async function GET(req: NextRequest) {
+  const user = await requireUserOrThrow(req as unknown as Request);
+  assertAdminOrThrow(user);
 
   const { where, target } = buildTargetWhere(req.url);
-
   const posts = await prisma.post.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -65,10 +51,9 @@ export async function GET(req: Request) {
   return NextResponse.json({ target, posts: items }, { status: 200 });
 }
 
-export async function DELETE(req: Request) {
-  const { user, status, error } = await getAuthUser(req);
-  if (!user) return NextResponse.json({ error }, { status });
-  if (!isAdminUser(user.email)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+export async function DELETE(req: NextRequest) {
+  const user = await requireUserOrThrow(req as unknown as Request);
+  assertAdminOrThrow(user);
 
   const { where } = buildTargetWhere(req.url);
 
@@ -78,7 +63,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "ids must be number[]" }, { status: 400 });
   }
 
-  // 指定ユーザーに属し、かつ選択された投稿だけを対象にする
   const targetPosts = await prisma.post.findMany({
     where: { ...where, id: { in: ids as number[] } },
     include: { images: true },
