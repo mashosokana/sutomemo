@@ -1,4 +1,4 @@
-//schema.prisma
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,8 +10,8 @@ datasource db {
 }
 
 enum Role {
-  user
-  admin
+  USER
+  ADMIN
 }
 
 enum PostStatus {
@@ -24,9 +24,8 @@ enum PostStatus {
 model User {
   id        String   @id @default(uuid()) @db.Uuid
   email     String   @unique
-  // Supabaseで管理するため任意化。どうしても必須のままにしたい場合は default("") を付ける
-  password  String?  
-  role      Role     @default(user)
+  password  String?
+  role      Role     @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   posts     Post[]
@@ -64,3 +63,4 @@ model Image {
   updatedAt   DateTime @updatedAt
   post        Post     @relation(fields: [postId], references: [id])
 }
+

@@ -1,9 +1,9 @@
 // src/lib/auth.ts
 import { supabaseAdmin } from "./supabaseAdmin";
 import { prisma } from "./prisma";
+import { Role } from "@prisma/client"; 
 
-export type UserRole = "admin" | "user";
-export type AuthUser = { id: string; email: string | null; role: UserRole };
+export type AuthUser = { id: string; email: string | null; role: Role };
 
 export type VerifyUserResult =
   | { user: AuthUser; error: null; status: 200 }
@@ -43,25 +43,24 @@ export async function verifyUser(req: Request): Promise<VerifyUserResult> {
     return { user: null, error: "メールアドレスがありません", status: 401 };
   }
 
-  const desiredRole: UserRole = emailsEqual(email, process.env.ADMIN_EMAIL)
-    ? "admin"
-    : "user";
+  const desiredRole: Role = emailsEqual(email, process.env.ADMIN_EMAIL)
+    ? Role.ADMIN
+    : Role.USER;
 
   const userInDb = await prisma.user.upsert({
     where: { email },
     create: {
-      id: supaUser.id,   
+      id: supaUser.id,
       email,
       role: desiredRole,
-      password: "",      
     },
     update: {
-      role: desiredRole, 
+      role: desiredRole,
     },
   });
 
   return {
-    user: { id: userInDb.id, email: userInDb.email, role: userInDb.role as UserRole },
+    user: { id: userInDb.id, email: userInDb.email, role: userInDb.role },
     error: null,
     status: 200,
   };
@@ -72,15 +71,14 @@ export function isGuest(user: AuthUser) {
 }
 
 export function isAdmin(user: AuthUser) {
-  return user.role === "admin" || emailsEqual(user.email, process.env.ADMIN_EMAIL);
+  return user.role === Role.ADMIN || emailsEqual(user.email, process.env.ADMIN_EMAIL);
 }
 
-export async function requireUserOrThrow(req: Request): Promise<AuthUser> {
-  const r = await verifyUser(req);
-  if (!r.user) {
-    throw new Response(r.error ?? "Unauthorized", { status: r.status });
-  }
-  return r.user;
+export async function requireAdminOrThrow(req: Request) {
+  const { user } = await verifyUser(req);
+  if (!user) throw Object.assign(new Error("Unauthorized"), { status: 401 });
+  if (user.role !== Role.ADMIN) throw Object.assign(new Error("Forbidden"), { status: 403 });
+  return user;
 }
 
 export function assertNotGuestOrThrow(user: AuthUser) {
@@ -88,7 +86,6 @@ export function assertNotGuestOrThrow(user: AuthUser) {
     throw new Response("Forbidden (guest)", { status: 403 });
   }
 }
-
 export function assertAdminOrThrow(user: AuthUser) {
   if (!isAdmin(user)) {
     throw new Response("Forbidden (admin only)", { status: 403 });
