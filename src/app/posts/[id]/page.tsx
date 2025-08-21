@@ -1,50 +1,75 @@
-// app/posts/[id]/page.tsx
-"use client";
+// src/app/posts/[id]/page.tsx
+'use client';
 
-import { useEffect, useRef } from "react";
-import { useSupabaseSession } from "@/app/hooks/useSupabaseSession";
-import { useImageOverlayEditor } from "@/app/hooks/useImageOverlayEditor"; 
+import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
+import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
+import ImageFileInput from '@/app/_components/ImageFileInput';
 
-export default function PostDetailPage({ params }: { params: { id: string } }) {
-  const postId = Number(params.id);
+export default function PostDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const postId = Number(id);
   const { token, session } = useSupabaseSession();
-  const isGuest = session?.user?.email === "guest@example.com";
+  const isGuest =
+    (session?.user?.email ?? '').trim().toLowerCase() ===
+    (process.env.NEXT_PUBLIC_GUEST_USER_EMAIL ?? 'guest@example.com').trim().toLowerCase();
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const {
     text, setText,
-    fontSize, setFontSize,
     textBoxSize, setTextBoxSize,
     dragOffset,
-    image,
     isProcessing,
     initFromPost,
     drawOnCanvas,
     bindCanvasDrag,
-    uploadImage,
     downloadCanvas,
-  } = useImageOverlayEditor({ postId, token, isGuest });
+    previewLocalFile,
+    fontSize,
+    setFontSize,
+  } = useImageOverlayEditor({ postId });
 
-  // 初期化（投稿取得）
-  useEffect(() => {
-    initFromPost();
-  }, [initFromPost]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
 
-  // キャンバス描画
-  useEffect(() => {
-    drawOnCanvas(canvasRef.current); // 幅300で描画（Hook内固定）
-  }, [image, text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
+  useEffect(() => { initFromPost(); }, [initFromPost]);
+  useEffect(() => { void drawOnCanvas(canvasRef.current); }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files?.[0]) return;
-    const file = e.target.files[0];
-    
-    await uploadImage(file, { currentImageKey: image?.imageKey ?? null });
+  const uploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    if (isGuest) { setUploadError('お試しユーザーはアップロードできません'); return; }
+    if (!token) { setUploadError('ログイン情報が取得できませんでした'); return; }
+
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadDoneMsg(null);
+
+    try {
+      for (const file of files) {
+        void previewLocalFile(file);
+
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`/api/posts/${postId}/images`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error((data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`);
+        }
+      }
+      setUploadDoneMsg('画像をアップロードしました');
+      await initFromPost();
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsUploading(false);
+    }
   };
-
-  if (isGuest) {
-    return <p className="text-center mt-8 text-gray-500">お試しユーザーでは保存されません（画面上のみ反映されます）</p>;
-  }
 
   return (
     <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black">
@@ -54,60 +79,77 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
         <canvas
           ref={canvasRef}
           onMouseDown={bindCanvasDrag}
-          className="border w-[300px] h-auto"
+          className="border border-black w-[300px] h-auto"
         />
 
-        <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
-          ギャラリー / ファイル選択
-          <input type="file" accept="image/*" onChange={handleUpload} className="hidden" />
-        </label>
+        <div className="w-full flex flex-col items-center gap-2">
+          <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
+            ギャラリー / ファイル選択
+            <ImageFileInput
+              onPick={uploadFiles}
+              to="image/jpeg"
+              quality={0.9}
+              multiple
+              disabled={isProcessing || isUploading || isGuest}
+              className="hidden"
+            />
+          </label>
+          {isUploading && <p className="text-xs text-blue-600">アップロード中…</p>}
+          {uploadDoneMsg && <span className="text-green-700 text-sm">{uploadDoneMsg}</span>}
+          {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
+        </div>
 
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={6}
           className="w-full border p-2 rounded"
-          disabled={isProcessing}
+          disabled={isProcessing || isUploading}
+          placeholder="ここにテキストを入力（caption/memo を自動復元）"
         />
 
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
           <label className="flex items-center gap-2">
             幅:
             <input
               type="range" min={100} max={260}
               value={textBoxSize.width}
               onChange={(e) => setTextBoxSize(s => ({ ...s, width: Number(e.target.value) }))}
-              disabled={isProcessing}
+              disabled={isProcessing || isUploading}
+              className="w-full"
             />
           </label>
+
           <label className="flex items-center gap-2">
             高さ:
             <input
               type="range" min={50} max={480}
               value={textBoxSize.height}
               onChange={(e) => setTextBoxSize(s => ({ ...s, height: Number(e.target.value) }))}
-              disabled={isProcessing}
+              disabled={isProcessing || isUploading}
+              className="w-full"
             />
           </label>
-        </div>
 
-        <div className="flex gap-4">
-          {(["small","medium","large"] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => setFontSize(s)}
-              className={`px-4 py-2 rounded ${fontSize === s ? "bg-blue-700 text-white" : "bg-gray-200"}`}
-              disabled={isProcessing}
+          <label className="flex items-center gap-2">
+            文字サイズ:
+            <select
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              disabled={isProcessing || isUploading}
+              className="border rounded px-2 py-1 text-sm w-full sm:w-auto"
             >
-              {s === "small" ? "小" : s === "medium" ? "中" : "大"}
-            </button>
-          ))}
+              {Array.from({ length: 18 - 9 + 1 }, (_, i) => 9 + i).map((n) => (
+                <option key={n} value={n}>{n}px</option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <button
           onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
           className="bg-black text-white px-6 py-2 rounded hover:bg-gray-800"
-          disabled={isProcessing}
+          disabled={isProcessing || isUploading}
         >
           ダウンロード
         </button>
@@ -115,3 +157,4 @@ export default function PostDetailPage({ params }: { params: { id: string } }) {
     </main>
   );
 }
+

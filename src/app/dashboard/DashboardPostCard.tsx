@@ -1,4 +1,5 @@
-// app/dashboard/DashboardPostCard.tsx
+"use client";
+
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 
@@ -11,6 +12,20 @@ type Props = {
   disabled?: boolean;
   optimized?: boolean;
 };
+
+
+function isSignedOrSpecialUrl(src: string) {
+  if (!src) return false;
+  if (src.startsWith("blob:") || src.startsWith("data:")) return true;
+  try {
+    const u = new URL(src);
+    if (u.searchParams.has("token")) return true;
+    if (u.pathname.includes("/sign/")) return true;
+  } catch {
+
+  }
+  return false;
+}
 
 export default function DashboardPostCard({
   date,
@@ -28,6 +43,9 @@ export default function DashboardPostCard({
   }, [imageUrl]);
 
   const showImage = Boolean(imageUrl) && !broken;
+  const src = (imageUrl ?? "").trim();
+  const shouldUnoptimize =
+    optimized === false || (src ? isSignedOrSpecialUrl(src) : false);
 
   return (
     <div className="w-[345px] bg-white rounded-xl shadow p-3 mb-4 text-black">
@@ -37,15 +55,15 @@ export default function DashboardPostCard({
         <div className="w-[60px] h-[60px] flex-shrink-0 bg-gray-100 rounded overflow-hidden relative mr-2">
           {showImage ? (
             <Image
-              key={imageUrl ?? "no-url"}   
-              src={imageUrl as string}
+              key={src || "no-url"}
+              src={src}
               alt={`投稿画像（${date}）`}
               fill
               sizes="60px"
               className="object-cover"
-              unoptimized={!optimized}
-              onError={() => setBroken(true)} 
               loading="lazy"
+              unoptimized={shouldUnoptimize}
+              onError={() => setBroken(true)}
             />
           ) : (
             <div
@@ -66,7 +84,9 @@ export default function DashboardPostCard({
         <button
           onClick={onEdit}
           disabled={disabled}
-          className={`text-gray-600 hover:underline ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`text-gray-600 hover:underline ${
+            disabled ? "opacity-50 cursor-not-allowed" : ""
+          }`}
           aria-label="この投稿を編集"
         >
           編集
@@ -74,7 +94,9 @@ export default function DashboardPostCard({
         <button
           onClick={onDelete}
           disabled={disabled}
-          className={`absolute right-0 text-red-500 hover:underline text-sm ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`absolute right-0 text-red-500 hover:underline text-sm ${
+            disabled ? "opacity-50 cursor-not-allowed" : ""
+          }`}
           aria-label="この投稿を削除"
         >
           削除
