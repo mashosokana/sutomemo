@@ -1,72 +1,68 @@
 // src/app/api/posts/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getPublicThumbUrl, createSignedUrl } from "@/lib/images";
+import { verifyUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SIGNED_URL_TTL = 60 * 60; 
-const IMAGE_BUCKET = "post-images"; 
+const SIGNED_URL_TTL = 60 * 60;        
+const IMAGE_BUCKET = "post-images";    
 
 const nonEmpty = (v?: string | null) => (v && v.trim() !== "" ? v : undefined);
 
-function isGuestUser(email?: string | null): boolean {
-  const a = email?.toLowerCase() ?? "";
-  const b = (process.env.GUEST_USER_EMAIL ?? "").toLowerCase();
-  return a === b;
-}
-
-async function getAuthUser(req: Request) {
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-  if (!token) return { user: null, status: 401 as const, error: "Unauthorized" };
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return { user: null, status: 401 as const, error: "Unauthorized" };
-  return { user: data.user, status: 200 as const, error: null };
+function isGuestEmail(email?: string | null): boolean {
+  const a = (email ?? "").trim().toLowerCase();
+  const b = (process.env.GUEST_USER_EMAIL ?? "").trim().toLowerCase();
+  return a !== "" && a === b;
 }
 
 
 export async function POST(req: Request) {
   try {
-    const { user, status, error } = await getAuthUser(req);
+
+    const { user, status, error } = await verifyUser(req);
     if (!user) return NextResponse.json({ error }, { status });
 
-    if (isGuestUser(user.email)) {
-      return NextResponse.json({ error: "ゲストユーザーは新規作成できません" }, { status: 403 });
+
+    if (isGuestEmail(user.email)) {
+      return NextResponse.json(
+        { error: "ゲストユーザーは新規作成できません。会員登録すると投稿できます。" }, 
+        { status: 403 }
+      );
     }
 
-    const body = await req.json().catch(() => null);
-    const caption: unknown = body?.caption;
-    const memo: unknown = body?.memo;
+    const body = await req.json().catch(() => ({} as unknown));
+    const caption = typeof (body as Record<string, unknown>)?.caption === "string"
+      ? ((body as Record<string, unknown>).caption as string).trim()
+      : "";
 
-    if (typeof caption !== "string" || caption.trim().length === 0) {
+    if (!caption) {
       return NextResponse.json({ error: "captionは必須です" }, { status: 400 });
     }
 
-    type MemoPayload = { answerWhy?: unknown; answerWhat?: unknown; answerNext?: unknown };
-    const { answerWhy, answerWhat, answerNext } = (memo ?? {}) as MemoPayload;
 
-    if (
-      typeof answerWhy !== "string" ||
-      typeof answerWhat !== "string" ||
-      typeof answerNext !== "string"
-    ) {
-      return NextResponse.json({ error: "memoの各項目は必須です" }, { status: 400 });
-    }
+    const memoRaw = (body as Record<string, unknown>)?.memo as
+      | { answerWhy?: unknown; answerWhat?: unknown; answerNext?: unknown }
+      | undefined;
+
+    const memoData =
+      memoRaw
+        ? {
+            answerWhy: typeof memoRaw.answerWhy === "string" ? memoRaw.answerWhy.trim() : null,
+            answerWhat: typeof memoRaw.answerWhat === "string" ? memoRaw.answerWhat.trim() : null,
+            answerNext: typeof memoRaw.answerNext === "string" ? memoRaw.answerNext.trim() : null,
+          }
+        : null;
 
     const post = await prisma.post.create({
       data: {
         userId: user.id,
-        caption: caption.trim(),
-        memo: {
-          create: {
-            answerWhy: answerWhy.trim(),
-            answerWhat: answerWhat.trim(),
-            answerNext: answerNext.trim(),
-          },
-        },
+        caption,
+        ...(memoData && (memoData.answerWhy || memoData.answerWhat || memoData.answerNext)
+          ? { memo: { create: memoData } }
+          : {}),
       },
       include: { memo: true },
     });
@@ -81,8 +77,9 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { user, status, error } = await getAuthUser(req);
+    const { user, status, error } = await verifyUser(req);
     if (!user) return NextResponse.json({ error }, { status });
+
 
     const posts = await prisma.post.findMany({
       where: { userId: user.id },
@@ -101,7 +98,7 @@ export async function GET(req: Request) {
         },
         images: {
           orderBy: { generatedAt: "desc" },
-          select: { id: true, imageKey: true }, 
+          select: { id: true, imageKey: true },
         },
       },
     });
@@ -109,35 +106,36 @@ export async function GET(req: Request) {
     const postsWithUrls = await Promise.all(
       posts.map(async (post) => {
 
-        const thumbKey =
-          (post as unknown as { thumbnailImageKey?: string | null })?.thumbnailImageKey ?? undefined;
+        const thumbKey = post.thumbnailImageKey ?? undefined;
 
-        const images: Array<{ id: number; imageKey: string }> = post.images;
 
-        
-        const nonHeic: Array<{ id: number; imageKey: string }> = images.filter(
-          (img: { id: number; imageKey: string }) => !/\.hei(c|f)$/i.test(img.imageKey)
+        const nonHeic = post.images.filter(
+          (img) => !/\.hei(c|f)$/i.test(img.imageKey)
         );
 
+
         const thumbUrl = getPublicThumbUrl(thumbKey, 120, 120);
+
 
         let fallbackUrl: string | undefined = undefined;
         if (!thumbUrl) {
           const firstKey = nonHeic[0]?.imageKey;
           if (firstKey) {
-            const tinySigned = await createSignedUrl(IMAGE_BUCKET, firstKey, SIGNED_URL_TTL, {
-              width: 120,
-              height: 120,
-              resize: "cover",
-            });
+            const tinySigned = await createSignedUrl(
+              IMAGE_BUCKET,
+              firstKey,
+              SIGNED_URL_TTL,
+              { width: 120, height: 120, resize: "cover" }
+            );
             fallbackUrl = nonEmpty(tinySigned);
           }
         }
 
         const signedImages = await Promise.all(
-          nonHeic.map(async (img: { id: number; imageKey: string }) => {
+          nonHeic.map(async (img) => {
             const url = await createSignedUrl(IMAGE_BUCKET, img.imageKey, SIGNED_URL_TTL);
-            return { id: img.id, imageKey: img.imageKey, signedUrl: nonEmpty(url) };
+            const u = nonEmpty(url);
+            return u ? { id: img.id, imageKey: img.imageKey, signedUrl: u } : null;
           })
         );
 
@@ -147,9 +145,9 @@ export async function GET(req: Request) {
           id: post.id,
           caption: post.caption,
           createdAt: post.createdAt,
-          memo: post.memo, 
+          memo: post.memo,
           ...(imageUrl ? { imageUrl } : {}), 
-          images: signedImages.filter((i: { signedUrl?: string }) => i.signedUrl),
+          images: signedImages.filter((x): x is NonNullable<typeof x> => !!x),
         };
       })
     );

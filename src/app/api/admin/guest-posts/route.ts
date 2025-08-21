@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma } from "@prisma/client";
 import { requireAdminOrThrow } from "@/lib/auth";
+import { ensureGuestUser } from "@/lib/guestUser"; 
+import { PostStatus } from "@prisma/client";                  
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,6 +102,7 @@ export async function DELETE(req: NextRequest) {
     if (allKeys.length > 0) {
       const { error: rmErr } = await supabaseAdmin.storage.from("post-images").remove(allKeys);
       if (rmErr) {
+        // eslint-disable-next-line no-console
         console.warn("Storage remove error:", rmErr.message);
       } else {
         removedFiles = allKeys.length;
@@ -115,6 +118,66 @@ export async function DELETE(req: NextRequest) {
     });
 
     return NextResponse.json({ deleted, removedFiles }, { status: 200 });
+  } catch (err: unknown) {
+    const { status, message } = toHttpError(err);
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+
+export async function POST(req: NextRequest) {
+  try {
+    await requireAdminOrThrow(req as unknown as Request);
+
+    type Body = {
+      caption?: string;
+      why?: string;
+      what?: string;
+      next?: string;
+      status?: keyof typeof PostStatus;   
+      count?: number;                     
+      thumbnailKey?: string;              
+    };
+
+    const body = (await req.json().catch(() => ({}))) as Body;
+    const {
+      caption = "（サンプル）今日やったこと",
+      why = "なぜ：学習記録を残すため",
+      what = "やったこと：管理ページの権限ガード実装",
+      next = "次にやる：E2Eテスト追加",
+      status = "published",
+      count = 1,
+      thumbnailKey,
+    } = body;
+
+    const guest = await ensureGuestUser();
+    const n = Math.max(1, Math.min(count, 20)); // 作りすぎ防止
+
+    const created = await prisma.$transaction(async (tx) => {
+      const items = [];
+      for (let i = 0; i < n; i++) {
+        const post = await tx.post.create({
+          data: {
+            userId: guest.id,
+            caption: n > 1 ? `${caption} (${i + 1})` : caption,
+            status: PostStatus[status] ?? PostStatus.published,
+            ...(thumbnailKey ? { thumbnailImageKey: thumbnailKey } : {}),
+            memo: {
+              create: {
+                answerWhy: why,
+                answerWhat: what,
+                answerNext: next,
+              },
+            },
+          },
+          select: { id: true, caption: true, status: true, createdAt: true },
+        });
+        items.push(post);
+      }
+      return items;
+    });
+
+    return NextResponse.json({ created }, { status: 201 });
   } catch (err: unknown) {
     const { status, message } = toHttpError(err);
     return NextResponse.json({ error: message }, { status });

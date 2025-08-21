@@ -1,4 +1,3 @@
-// src/app/posts/[id]/page.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -6,6 +5,33 @@ import { useParams } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
+
+
+type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
+type ApiImage = { id: number; imageKey: string; signedUrl?: string };
+type ApiPost  = { id: number; caption: string; memo?: ApiMemo | null; images?: ApiImage[] };
+
+function parsePost(resp: unknown): ApiPost | null {
+  if (!resp || typeof resp !== 'object') return null;
+  const root = resp as Record<string, unknown>;
+  const p = (root.post && typeof root.post === 'object' ? root.post : root) as Record<string, unknown>;
+  const id = typeof p.id === 'number' ? p.id : null;
+  const caption = typeof p.caption === 'string' ? p.caption : '';
+  const memo = (p.memo && typeof p.memo === 'object') ? (p.memo as ApiMemo) : null;
+  const images = Array.isArray(p.images) ? (p.images as ApiImage[]) : [];
+  return id ? { id, caption, memo, images } : null;
+}
+
+
+function buildEditorSeed(post: ApiPost): string {
+  const parts: string[] = [];
+  const push = (v?: string | null) => { if (typeof v === 'string' && v.trim() !== '') parts.push(v.trim()); };
+  push(post.caption);
+  push(post.memo?.answerWhy ?? null);
+  push(post.memo?.answerWhat ?? null);
+  push(post.memo?.answerNext ?? null);
+  return parts.join('\n'); // 行間を空けたいなら '\n\n'
+}
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,9 +60,39 @@ export default function PostDetailPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
 
+  
   useEffect(() => { initFromPost(); }, [initFromPost]);
-  useEffect(() => { void drawOnCanvas(canvasRef.current); }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
+  
+  useEffect(() => {
+    if (!token || !postId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/posts/${postId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const json: unknown = await res.json().catch(() => null);
+        const post = parsePost(json);
+        if (!post) return;
+
+        
+        if (!userEditedRef.current) {
+          setText(buildEditorSeed(post));
+        }
+      } catch {
+       
+      }
+    })();
+  }, [token, postId, text, setText]);
+
+  
+  useEffect(() => {
+    void drawOnCanvas(canvasRef.current);
+  }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
+
+  
   const uploadFiles = async (files: File[]) => {
     if (files.length === 0) return;
     if (isGuest) { setUploadError('お試しユーザーはアップロードできません'); return; }
@@ -49,7 +105,6 @@ export default function PostDetailPage() {
     try {
       for (const file of files) {
         void previewLocalFile(file);
-
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch(`/api/posts/${postId}/images`, {
@@ -71,10 +126,13 @@ export default function PostDetailPage() {
     }
   };
 
+  const userEditedRef = useRef(false);
+
   return (
     <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black">
-      <h1 className="text-base font-semibold mb-2">投稿編集</h1>
+      <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
 
+  
       <div className="space-y-4 w-full flex flex-col items-center">
         <canvas
           ref={canvasRef}
@@ -99,13 +157,14 @@ export default function PostDetailPage() {
           {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
         </div>
 
+  
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          className="w-full border p-2 rounded"
+          onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
+          rows={10}
+          className="w-full border p-2 rounded min-h-[180px] max-h=[60vh] overflow-auto resize-y"
           disabled={isProcessing || isUploading}
-          placeholder="ここにテキストを入力（caption/memo を自動復元）"
+          placeholder="作成時の caption / Why / What / Next がここにまとまって入ります。自由に編集できます。"
         />
 
         <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
@@ -157,4 +216,3 @@ export default function PostDetailPage() {
     </main>
   );
 }
-
