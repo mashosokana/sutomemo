@@ -13,22 +13,38 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const handleGuestLogin = async () => {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: process.env.NEXT_PUBLIC_GUEST_EMAIL!,
-      password: process.env.NEXT_PUBLIC_GUEST_PASSWORD!,
-    });
+      const res = await fetch('/api/auth/guest-login', { method: 'POST' });
+      const body = await res.json();
 
-    if (error) {
-      alert(`ログイン失敗: ${error.message}`);
+      if (!res.ok) {
+        alert(`ログイン失敗: ${body?.error ?? res.statusText}`);
+        setLoading(false);
+        return;
+      }
+
+      if (body.access_token && body.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: body.access_token,
+          refresh_token: body.refresh_token,
+        });
+        if (error) {
+          alert(`セッション同期失敗: ${error.message}`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      router.replace('/dashboard');
+      router.refresh();
+    } catch (err) {
+      console.error(err);
+      alert('ログイン失敗: ネットワークエラー');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.replace('/dashboard');
-    router.refresh();
-    setLoading(false);
   };
 
   return (
