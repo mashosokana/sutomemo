@@ -59,6 +59,25 @@ export default function PostDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
+  const [kbOffset, setKbOffset] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => {
+      const hidden = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
+      setKbOffset(hidden);
+    };
+
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
 
   
   useEffect(() => { initFromPost(); }, [initFromPost]);
@@ -129,15 +148,16 @@ export default function PostDetailPage() {
   const userEditedRef = useRef(false);
 
   return (
-    <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black">
+    <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black pb-40 sm:pb-32">
       <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
 
   
       <div className="space-y-4 w-full flex flex-col items-center">
         <canvas
           ref={canvasRef}
-          onMouseDown={bindCanvasDrag}
-          className="border border-black w-[300px] h-auto"
+          onPointerDown={bindCanvasDrag}
+          onContextMenu={(e) => e.preventDefault()}
+          className="border border-black w-[300px] h-auto touch-none select-none"
         />
 
         <div className="w-full flex flex-col items-center gap-2">
@@ -165,11 +185,26 @@ export default function PostDetailPage() {
           className="w-full border p-2 rounded min-h-[180px] max-h=[60vh] overflow-auto resize-y"
           disabled={isProcessing || isUploading}
           placeholder="作成時の caption / Why / What / Next がここにまとまって入ります。自由に編集できます。"
-        />
-
-        <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-          <label className="flex items-center gap-2">
-            幅:
+        /> 
+      </div>
+      <div
+        className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen"
+        style={{ bottom: `calc(${kbOffset}px + env(safe-area-inset-bottom))` }}
+      >
+        <div
+          className="
+            mx-auto w-full
+            max-w-[min(100vw,420px)]   /* 端末幅を超えない上限 */
+            px-2 py-2
+            grid gap-2 items-center
+            grid-cols-1                 /* 超狭い端末は1列 */
+            min-[380px]:grid-cols-2     /* 380px以上で2列 */
+            sm:grid-cols-4              /* 640px以上で4列 */
+          "
+        >
+          {/* 幅 */}
+          <label className="flex flex-col gap-1 min-w-0">
+            <span className="text-xs">幅</span>
             <input
               type="range" min={100} max={260}
               value={textBoxSize.width}
@@ -179,8 +214,9 @@ export default function PostDetailPage() {
             />
           </label>
 
-          <label className="flex items-center gap-2">
-            高さ:
+          {/* 高さ */}
+          <label className="flex flex-col gap-1 min-w-0">
+            <span className="text-xs">高さ</span>
             <input
               type="range" min={50} max={480}
               value={textBoxSize.height}
@@ -190,29 +226,32 @@ export default function PostDetailPage() {
             />
           </label>
 
-          <label className="flex items-center gap-2">
-            文字サイズ:
+          {/* 文字サイズ */}
+          <label className="flex flex-col gap-1 min-w-0">
+            <span className="text-xs">サイズ</span>
             <select
               value={fontSize}
               onChange={(e) => setFontSize(Number(e.target.value))}
               disabled={isProcessing || isUploading}
-              className="border rounded px-2 py-1 text-sm w-full sm:w-auto"
+              className="w-full text-sm border rounded px-2 py-1"
             >
-              {Array.from({ length: 18 - 9 + 1 }, (_, i) => 9 + i).map((n) => (
+              {Array.from({ length: 10 }, (_, i) => 9 + i).map((n) => (
                 <option key={n} value={n}>{n}px</option>
               ))}
             </select>
           </label>
-        </div>
 
-        <button
-          onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
-          className="bg-black text-white px-6 py-2 rounded hover:bg-gray-800"
-          disabled={isProcessing || isUploading}
-        >
-          ダウンロード
-        </button>
+          {/* ダウンロード */}
+          <button
+            onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
+            className="w-full text-sm bg-black text-white px-2 py-2 rounded hover:bg-gray-800 disabled:opacity-50"
+            disabled={isProcessing || isUploading}
+          >
+            ダウンロード
+          </button>
+        </div>
       </div>
+
     </main>
   );
 }

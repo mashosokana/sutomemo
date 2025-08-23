@@ -2,7 +2,6 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 
 type Point = { x: number; y: number };
@@ -23,15 +22,30 @@ type UseImageOverlayEditorReturn = {
 
   initFromPost: () => Promise<void>;
   drawOnCanvas: (canvas: HTMLCanvasElement | null) => Promise<void>;
-  bindCanvasDrag: (e: ReactMouseEvent<HTMLCanvasElement>) => void;
+  bindCanvasDrag: (e: React.PointerEvent<HTMLCanvasElement>) => void;
   downloadCanvas: (canvas: HTMLCanvasElement | null, filename: string) => void;
   previewLocalFile: (file: File) => Promise<void>;
 };
 
 /* ---------------- ユーティリティ ---------------- */
-
 const DRAG_DAMPING = 0.7;
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+// ★ ここに追加（clamp の直下がおすすめ）
+function normClientXY(ev: MouseEvent | PointerEvent | TouchEvent) {
+  if ('clientX' in ev) return { x: ev.clientX, y: ev.clientY };
+  const t = (ev.touches?.[0] ?? ev.changedTouches?.[0]);
+  return { x: t?.clientX ?? 0, y: t?.clientY ?? 0 };
+}
+function canvasXY(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - r.left) * (canvas.width / r.width),
+    y: (clientY - r.top) * (canvas.height / r.height),
+  };
+}
+
+
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
@@ -377,47 +391,72 @@ export function useImageOverlayEditor({ postId }: UseImageOverlayEditorArgs): Us
     if (lastCanvasRef.current) void drawOnCanvas(lastCanvasRef.current);
   }, [baseImageUrl, drawOnCanvas]);
 
-  /* 5) ドラッグ開始（減衰＋枠内クランプ、終了時に保存） */
-  function bindCanvasDrag(e: ReactMouseEvent<HTMLCanvasElement>) {
-    const canvas = e.currentTarget;
-    if (!canvas) return;
+  /* 5) ドラッグ開始（PC/スマホ共通：Pointer + Touch 併用） */
+const dragStateRef = useRef<{ active: boolean; lastX: number; lastY: number; target?: HTMLCanvasElement }>(
+  { active: false, lastX: 0, lastY: 0, target: undefined }
+);
 
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width || 1;
-    const scaleY = canvas.height / rect.height || 1;
+function bindCanvasDrag(e: React.PointerEvent<HTMLCanvasElement>) {
+  const canvas = e.currentTarget;
+  if (!canvas) return;
 
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startPos = { x: dragRef.current.x, y: dragRef.current.y };
+  // この要素にポインターを捕捉（指が外れても追従）
+  canvas.setPointerCapture?.(e.pointerId);
 
-    const boxW = sizeRef.current.width * scaleX;
-    const boxH = sizeRef.current.height * scaleY;
+  const start = canvasXY(canvas, e.clientX, e.clientY);
+  dragStateRef.current = { active: true, lastX: start.x, lastY: start.y, target: canvas };
 
-    const onMove = (ev: MouseEvent) => {
-      const dxCss = ev.clientX - startX;
-      const dyCss = ev.clientY - startY;
-      const dx = dxCss * scaleX * DRAG_DAMPING;
-      const dy = dyCss * scaleY * DRAG_DAMPING;
+  // Pointer Move（マウス/ペン/指 = 1本ならこれで動く）
+  const onPointerMove: (ev: PointerEvent) => void = (ev) => {
+    const st = dragStateRef.current;
+    if (!st.active || !st.target) return;
+    const p = canvasXY(st.target, ev.clientX, ev.clientY);
+    const dx = (p.x - st.lastX) * DRAG_DAMPING;
+    const dy = (p.y - st.lastY) * DRAG_DAMPING;
 
-      let nx = startPos.x + dx;
-      let ny = startPos.y + dy;
+    setDragOffset((s) => ({ x: s.x + dx, y: s.y + dy }));
+    dragStateRef.current.lastX = p.x;
+    dragStateRef.current.lastY = p.y;
 
-      nx = clamp(nx, 0, canvas.width - boxW);
-      ny = clamp(ny, 0, canvas.height - boxH);
+    ev.preventDefault(); // スクロールよりドラッグを優先
+  };
 
-      setDragOffset({ x: nx, y: ny });
-      dragRef.current = { x: nx, y: ny };
-    };
+  const onPointerUp: (ev: PointerEvent) => void = () => {
+    dragStateRef.current.active = false;
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    canvas.releasePointerCapture?.(e.pointerId);
+    commitSave(); // 終了時に保存
+  };
 
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      commitSave(); // ← ドラッグ終了時に確定保存
-    };
+  // 古めの端末向けフォールバック（iOS で Pointer が不安定な場合）
+  const onTouchMove: (ev: TouchEvent) => void = (ev) => {
+    const st = dragStateRef.current;
+    if (!st.active || !st.target) return;
+    const { x: cx, y: cy } = normClientXY(ev);
+    const p = canvasXY(st.target, cx, cy);
+    const dx = (p.x - st.lastX) * DRAG_DAMPING;
+    const dy = (p.y - st.lastY) * DRAG_DAMPING;
+    setDragOffset((s) => ({ x: s.x + dx, y: s.y + dy }));
+    dragStateRef.current.lastX = p.x;
+    dragStateRef.current.lastY = p.y;
+    ev.preventDefault();
+  };
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
+  const onTouchEnd: (ev: TouchEvent) => void = () => {
+    dragStateRef.current.active = false;
+    window.removeEventListener('touchmove', onTouchMove);
+    window.removeEventListener('touchend', onTouchEnd);
+    commitSave();
+  };
+
+  // グローバルにバインド（passive:false で preventDefault を有効に）
+  window.addEventListener('pointermove', onPointerMove, { passive: false });
+  window.addEventListener('pointerup',   onPointerUp,   { passive: true  });
+  window.addEventListener('touchmove',   onTouchMove,   { passive: false });
+  window.addEventListener('touchend',    onTouchEnd,    { passive: true  });
+}
+
 
   /* ダウンロード */
   const downloadCanvas = useCallback((canvas: HTMLCanvasElement | null, filename: string) => {

@@ -1,3 +1,4 @@
+//app/_components/FabricCanvasEditor.tsx
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
@@ -13,81 +14,123 @@ export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
   const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
   const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 400 });
 
+  // ポインタードラッグの内部状態
+  const dragRef = useRef<{ active: boolean; lastX: number; lastY: number }>(
+    { active: false, lastX: 0, lastY: 0 }
+  );
+
+  // 画面座標(clientX/Y) → キャンバス座標への変換（CSSスケールに影響されない）
+  const toCanvasXY = (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
+    const r = canvas.getBoundingClientRect();
+    const x = (clientX - r.left) * (canvas.width / r.width);
+    const y = (clientY - r.top) * (canvas.height / r.height);
+    return { x, y };
+  };
+
   // Canvas 描画
   useEffect(() => {
     if (!canvasRef.current || !imageUrl) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const image = new Image();
-    image.crossOrigin = "anonymous";
+    image.crossOrigin = 'anonymous';
     image.src = imageUrl;
 
     image.onload = () => {
-      const fixedWidth = 300;
-      const scale = fixedWidth / image.width;
-      const newWidth = fixedWidth;
-      const newHeight = image.height * scale;
+      // 幅300pxで固定表示（必要なら可変に）
+      const fixedCSSWidth = 300;
 
-      canvas.width = newWidth;
-      canvas.height = newHeight;
+      // 高DPRでもにじまないよう、内部ピクセルを合わせる（任意）
+      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+      const scale = fixedCSSWidth / image.width;
+      const cssW = fixedCSSWidth;
+      const cssH = image.height * scale;
+      const pixW = Math.round(cssW * dpr);
+      const pixH = Math.round(cssH * dpr);
 
-      ctx.clearRect(0, 0, newWidth, newHeight);
-      ctx.drawImage(image, 0, 0, newWidth, newHeight);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      canvas.width = pixW;
+      canvas.height = pixH;
 
-      const clampedX = Math.min(Math.max(0, dragOffset.x), newWidth - textBoxSize.width);
-      const clampedY = Math.min(Math.max(0, dragOffset.y), newHeight - textBoxSize.height);
+      // 描画スケール
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.drawImage(image, 0, 0, cssW, cssH);
+
+      // テキストボックス位置のクランプ
+      const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+      const clampedX = clamp(dragOffset.x, 0, cssW - textBoxSize.width);
+      const clampedY = clamp(dragOffset.y, 0, cssH - textBoxSize.height);
+
+      // 背景（白半透明などにしたければここを変更）
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillRect(clampedX, clampedY, textBoxSize.width, textBoxSize.height);
 
-      ctx.font = "16px sans-serif";
-      ctx.fillStyle = "#fff";
-      ctx.textBaseline = "top";
-      const lines = text.split("\n");
+      // テキスト
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = '#111';
+      ctx.textBaseline = 'top';
+      const lines = text.split('\n');
       lines.forEach((line, i) => {
-        ctx.fillText(line, clampedX + 10, clampedY + 10 + i * 20);
+        ctx.fillText(line, clampedX + 10, clampedY + 10 + i * 22);
       });
 
+      // 画面外に出たら内部状態を修正
       if (clampedX !== dragOffset.x || clampedY !== dragOffset.y) {
         setDragOffset({ x: clampedX, y: clampedY });
       }
     };
   }, [imageUrl, text, dragOffset, textBoxSize]);
 
-  // ドラッグ操作
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const startX = e.nativeEvent.offsetX;
-    const startY = e.nativeEvent.offsetY;
-    const initialX = dragOffset.x;
-    const initialY = dragOffset.y;
+  // --- Pointer Events（PC/スマホ共通） ---
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dx = moveEvent.offsetX - startX;
-      const dy = moveEvent.offsetY - startY;
+    canvas.setPointerCapture?.(e.pointerId);
 
-      setDragOffset({
-        x: initialX + dx,
-        y: initialY + dy,
-      });
+    const start = toCanvasXY(canvas, e.clientX, e.clientY);
+    dragRef.current.active = true;
+    dragRef.current.lastX = start.x;
+    dragRef.current.lastY = start.y;
+
+    // ← ここを明示的に型付け
+    const onMove: (ev: PointerEvent) => void = (ev) => {
+      if (!dragRef.current.active || !canvasRef.current) return;
+      const p = toCanvasXY(canvasRef.current, ev.clientX, ev.clientY);
+      const dx = p.x - dragRef.current.lastX;
+      const dy = p.y - dragRef.current.lastY;
+
+      setDragOffset((s) => ({ x: s.x + dx, y: s.y + dy }));
+      dragRef.current.lastX = p.x;
+      dragRef.current.lastY = p.y;
+
+      ev.preventDefault(); // スクロールよりドラッグを優先
     };
 
-    const handleMouseUp = () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+    const onUp: (ev: PointerEvent) => void = () => {
+      dragRef.current.active = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      canvas.releasePointerCapture?.(e.pointerId);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    // options も正しい型なので any は不要
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup',   onUp,   { passive: true });
   };
+
 
   const handleDownload = () => {
     if (!canvasRef.current) return;
-    const link = document.createElement("a");
-    link.download = "memo-image.png";
-    link.href = canvasRef.current.toDataURL("image/png");
+    const link = document.createElement('a');
+    link.download = 'memo-image.png';
+    link.href = canvasRef.current.toDataURL('image/png');
     link.click();
   };
 
@@ -95,8 +138,9 @@ export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
     <div className="w-full max-w-md mx-auto space-y-4">
       <canvas
         ref={canvasRef}
-        onMouseDown={handleCanvasMouseDown}
-        className="border w-[300px] h-auto"
+        onPointerDown={handlePointerDown}
+        onContextMenu={(e) => e.preventDefault()}
+        className="border w-[300px] h-auto touch-none select-none"
       />
 
       <textarea
