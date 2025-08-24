@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient, type Session } from "@supabase/auth-helpers-nextjs";
 
-/** any を使わず安全に role を取り出す */
+
 function getRole(meta: unknown): string | undefined {
   if (!meta || typeof meta !== "object") return undefined;
   const rec = meta as Record<string, unknown>;
@@ -13,7 +13,6 @@ function getRole(meta: unknown): string | undefined {
 }
 
 export function useAuthInfo() {
-  // Provider不要のクライアント（App Router推奨）
   const supabase = useMemo(() => createClientComponentClient(), []);
   const [token, setToken] = useState<string | null>(null);
   const [isGuest, setIsGuest] = useState(false);
@@ -21,7 +20,6 @@ export function useAuthInfo() {
   useEffect(() => {
     let mounted = true;
 
-    // 初期取得
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       const session: Session | null = data.session;
@@ -32,7 +30,6 @@ export function useAuthInfo() {
       setIsGuest(role === "guest");
     });
 
-    // 変更を購読
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       if (!mounted) return;
       setToken(s?.access_token ?? null);

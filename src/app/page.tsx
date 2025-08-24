@@ -48,7 +48,7 @@ export default function Home() {
   };
 
   return (
-    <main className="bg-white ext-black w-[393px] px-6 space-y-6">
+    <main className="bg-white text-black w-[393px] px-6 space-y-6">
       <div className="bg-white text-black w-full max-w-md px-6 py-6 space-y-6">
         <div className="flex justify-between items-start">
           <div className="flex-1 pr-4">
