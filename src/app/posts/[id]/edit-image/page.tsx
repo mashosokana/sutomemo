@@ -6,11 +6,16 @@ import { useParams } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
+import { useAuthMe } from '@/app/hooks/useAuthMe';             
+import MemberGateButton from '@/app/_components/MemberGateButton';
+import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
 
 export default function EditImagePage() {
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
   const { token } = useSupabaseSession(); // Authorization 用
+  const { data: me } = useAuthMe();
+  const isGuest = me?.isGuest ?? false;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const {
@@ -24,33 +29,28 @@ export default function EditImagePage() {
     downloadCanvas,
   } = useImageOverlayEditor({ postId });
 
-  
+  // ローカル選択 → プレビュー
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
 
-  
-  const previewUrls = useMemo(() => selectedFiles.map(f => URL.createObjectURL(f)), [selectedFiles]);
-  useEffect(() => () => previewUrls.forEach(u => URL.revokeObjectURL(u)), [previewUrls]);
+  const previewUrls = useMemo(
+    () => selectedFiles.map((f) => URL.createObjectURL(f)),
+    [selectedFiles]
+  );
+  useEffect(() => () => previewUrls.forEach((u) => URL.revokeObjectURL(u)), [previewUrls]);
 
-  
   useEffect(() => { initFromPost(); }, [initFromPost]);
-  
   useEffect(() => { drawOnCanvas(canvasRef.current); }, [text, textBoxSize, dragOffset, drawOnCanvas]);
 
-  
-  const uploadSelectedFiles = async () => {
-    if (!token) {
-      setUploadError('ログイン情報が取得できませんでした');
-      return;
-    }
+  // 会員のみ：選択済みファイルをサーバ保存
+  const uploadSelectedFiles = async (): Promise<void> => {
+    if (!token) { setUploadError('ログイン情報が取得できませんでした'); return; }
     if (selectedFiles.length === 0) return;
-
     setIsUploading(true);
     setUploadError(null);
     setUploadDoneMsg(null);
-
     try {
       for (const file of selectedFiles) {
         const fd = new FormData();
@@ -67,7 +67,7 @@ export default function EditImagePage() {
       }
       setSelectedFiles([]);
       setUploadDoneMsg('画像をアップロードしました');
-      await initFromPost(); 
+      await initFromPost();
     } catch (e: unknown) {
       setUploadError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -79,16 +79,18 @@ export default function EditImagePage() {
     <main className="max-w-md mx-auto p-4 text-black bg-white">
       <h1 className="text-xl font-bold mb-4">投稿編集</h1>
 
-      
+      {/* キャンバスは 1つに統一（ゲスト時は透かしオーバーレイ） */}
       <div className="mb-4 flex flex-col items-center">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={bindCanvasDrag}
-          className="border w-[300px] h-auto"
-        />
+        <WatermarkOverlay>
+          <canvas
+            ref={canvasRef}
+            onPointerDown={bindCanvasDrag}
+            className="border w-[300px] h-auto touch-none select-none"
+          />
+        </WatermarkOverlay>
       </div>
 
-      
+      {/* ローカル選択はゲストもOK（Supabase保存は会員のみ） */}
       {previewUrls.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -109,7 +111,7 @@ export default function EditImagePage() {
           ギャラリー / ファイル選択（HEICは自動でJPEGに変換）
         </label>
         <ImageFileInput
-          onPick={setSelectedFiles}
+          onPick={setSelectedFiles}     
           to="image/jpeg"
           quality={0.9}
           multiple
@@ -121,6 +123,12 @@ export default function EditImagePage() {
             選択中：{selectedFiles.map((f) => f.name).join(', ')}
           </p>
         )}
+        {isGuest && (
+          <p className="text-xs text-gray-600 mt-1">
+            ※ ゲストは画像のサーバ保存とダウンロードができません。登録すると解放されます。
+          </p>
+        )}
+
       </div>
 
       <textarea
@@ -137,7 +145,7 @@ export default function EditImagePage() {
           <input
             type="range" min={100} max={260}
             value={textBoxSize.width}
-            onChange={(e) => setTextBoxSize(s => ({ ...s, width: Number(e.target.value) }))}
+            onChange={(e) => setTextBoxSize((s) => ({ ...s, width: Number(e.target.value) }))}
             disabled={isProcessing || isUploading}
           />
         </label>
@@ -146,32 +154,34 @@ export default function EditImagePage() {
           <input
             type="range" min={50} max={500}
             value={textBoxSize.height}
-            onChange={(e) => setTextBoxSize(s => ({ ...s, height: Number(e.target.value) }))}
+            onChange={(e) => setTextBoxSize((s) => ({ ...s, height: Number(e.target.value) }))}
             disabled={isProcessing || isUploading}
           />
         </label>
       </div>
 
+      {/* 会員だけサーバ保存できる（ゲートボタンで誘導） */}
       <div className="flex items-center gap-2 mb-6">
-        <button
-          onClick={uploadSelectedFiles}
+        <MemberGateButton
+          onAllow={uploadSelectedFiles}
+          labelMember="選択画像をアップロード"
+          labelGuest="登録して画像を保存"
           className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
           disabled={isProcessing || isUploading || selectedFiles.length === 0}
-        >
-          {isUploading ? 'アップロード中…' : '選択画像をアップロード'}
-        </button>
+        />
         {uploadDoneMsg && <span className="text-green-700 text-sm">{uploadDoneMsg}</span>}
         {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
       </div>
 
+      {/* ダウンロードも会員のみ */}
       <div className="text-center">
-        <button
-          onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-memo.png`)}
+        <MemberGateButton
+          onAllow={() => downloadCanvas(canvasRef.current, `post-${postId}-memo.png`)}
+          labelMember="ダウンロード"
+          labelGuest="登録してダウンロード"
           className="bg-black text-white px-4 py-2 rounded"
           disabled={isProcessing || isUploading}
-        >
-          ダウンロード
-        </button>
+        />
       </div>
     </main>
   );

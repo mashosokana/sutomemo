@@ -1,10 +1,16 @@
+// src/app/posts/[id]/page.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
+import { useAuthMe } from '@/app/hooks/useAuthMe';
+import MemberGateButton from '@/app/_components/MemberGateButton';
+import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
+import BlurredTextPreview from '@/app/_components/BlurredTextPreview';
+import TrialNotice from '@/app/_components/TrialNotice';
 
 
 type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
@@ -22,7 +28,6 @@ function parsePost(resp: unknown): ApiPost | null {
   return id ? { id, caption, memo, images } : null;
 }
 
-
 function buildEditorSeed(post: ApiPost): string {
   const parts: string[] = [];
   const push = (v?: string | null) => { if (typeof v === 'string' && v.trim() !== '') parts.push(v.trim()); };
@@ -30,16 +35,27 @@ function buildEditorSeed(post: ApiPost): string {
   push(post.memo?.answerWhy ?? null);
   push(post.memo?.answerWhat ?? null);
   push(post.memo?.answerNext ?? null);
-  return parts.join('\n'); // 行間を空けたいなら '\n\n'
+  return parts.join('\n');
+}
+
+/** ★ 追加：ゲスト用一時下書きの型と結合関数 */
+type GuestDraft = { caption: string; answerWhy: string; answerWhat: string; answerNext: string };
+function buildSeedFromDraft(d: GuestDraft): string {
+  return [d.caption, d.answerWhy, d.answerWhat, d.answerNext].filter((s) => s && s.trim() !== '').join('\n');
 }
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
-  const { token, session } = useSupabaseSession();
-  const isGuest =
-    (session?.user?.email ?? '').trim().toLowerCase() ===
-    (process.env.NEXT_PUBLIC_GUEST_USER_EMAIL ?? 'guest@example.com').trim().toLowerCase();
+  const { token } = useSupabaseSession();
+  const { data: me } = useAuthMe();
+  const isGuest = me?.isGuest ?? false;
+
+  const searchParams = useSearchParams();
+  const isTrial = searchParams.has('trial');
+  const router = useRouter(); // BlurredTextPreview の onUnlock で使用
+
+  const userEditedRef = useRef(false); // ← 早めに定義しておく
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const {
@@ -61,15 +77,14 @@ export default function PostDetailPage() {
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
   const [kbOffset, setKbOffset] = useState(0);
 
+  // キーボード検知（固定フッターの避け）
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-
     const update = () => {
       const hidden = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
       setKbOffset(hidden);
     };
-
     update();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
@@ -79,10 +94,13 @@ export default function PostDetailPage() {
     };
   }, []);
 
-  
-  useEffect(() => { initFromPost(); }, [initFromPost]);
+  useEffect(() => {
+    if (!isTrial && postId > 0) {
+      void initFromPost();
+    }
+  }, [initFromPost, isTrial, postId]);
 
-  
+  // DBからメモを初期反映（ゲストtrialで既にローカル反映済みなら userEditedRef により上書きしない）
   useEffect(() => {
     if (!token || !postId) return;
     (async () => {
@@ -95,27 +113,56 @@ export default function PostDetailPage() {
         const json: unknown = await res.json().catch(() => null);
         const post = parsePost(json);
         if (!post) return;
-
-        
         if (!userEditedRef.current) {
           setText(buildEditorSeed(post));
         }
       } catch {
-       
+        // silent
       }
     })();
-  }, [token, postId, text, setText]);
+  }, [token, postId, setText]);
 
-  
+  // ★ ゲスト & trial のときは sessionStorage の下書きを最優先で反映
+  useEffect(() => {
+    if (!isGuest || !isTrial) return;
+    try {
+      const raw = sessionStorage.getItem('guestDraft');
+      if (!raw) return;
+      const draft = JSON.parse(raw) as GuestDraft;
+      const seed = buildSeedFromDraft(draft);
+      if (seed.trim() !== '') {
+        userEditedRef.current = true; // DBメモで上書きされないように先に立てる
+        setText(seed);
+      }
+    } catch {
+      // silent
+    }
+  }, [isGuest, isTrial, setText]);
+
   useEffect(() => {
     void drawOnCanvas(canvasRef.current);
   }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
-  
-  const uploadFiles = async (files: File[]) => {
+  // 選択 → まずローカルプレビュー（ゲストもOK）→ 会員だけサーバ保存
+  const uploadFiles = async (files: File[]): Promise<void> => {
     if (files.length === 0) return;
-    if (isGuest) { setUploadError('お試しユーザーはアップロードできません'); return; }
-    if (!token) { setUploadError('ログイン情報が取得できませんでした'); return; }
+
+    // ① 全員：ローカルプレビュー
+    for (const file of files) {
+      void previewLocalFile(file);
+    }
+
+    // ② ゲストはここで終了（サーバ保存はしない）
+    if (isGuest) {
+      setUploadError('画像のサーバ保存は会員限定です。登録すると保存できます。');
+      return;
+    }
+
+    // ③ 会員のみサーバ保存
+    if (!token) {
+      setUploadError('ログイン情報が取得できませんでした');
+      return;
+    }
 
     setIsUploading(true);
     setUploadError(null);
@@ -123,7 +170,6 @@ export default function PostDetailPage() {
 
     try {
       for (const file of files) {
-        void previewLocalFile(file);
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch(`/api/posts/${postId}/images`, {
@@ -132,8 +178,10 @@ export default function PostDetailPage() {
           body: fd,
         });
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error((data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`);
+          const data: unknown = await res.json().catch(() => ({}));
+          const msg =
+            (data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`;
+          throw new Error(msg);
         }
       }
       setUploadDoneMsg('画像をアップロードしました');
@@ -145,21 +193,23 @@ export default function PostDetailPage() {
     }
   };
 
-  const userEditedRef = useRef(false);
 
   return (
     <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black pb-40 sm:pb-32">
       <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
 
-  
       <div className="space-y-4 w-full flex flex-col items-center">
-        <canvas
-          ref={canvasRef}
-          onPointerDown={bindCanvasDrag}
-          onContextMenu={(e) => e.preventDefault()}
-          className="border border-black w-[300px] h-auto touch-none select-none"
-        />
+        {/* キャンバスは WatermarkOverlay で包んだ1つに統一 */}
+        <WatermarkOverlay>
+          <canvas
+            ref={canvasRef}
+            onPointerDown={bindCanvasDrag}
+            onContextMenu={(e) => e.preventDefault()}
+            className="border border-black w-[300px] h-auto touch-none select-none"
+          />
+        </WatermarkOverlay>
 
+        {/* 画像選択：ゲストも選択OK／会員はサーバ保存まで */}
         <div className="w-full flex flex-col items-center gap-2">
           <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
             ギャラリー / ファイル選択
@@ -168,38 +218,56 @@ export default function PostDetailPage() {
               to="image/jpeg"
               quality={0.9}
               multiple
-              disabled={isProcessing || isUploading || isGuest}
+              disabled={isProcessing || isUploading}
               className="hidden"
             />
           </label>
+
+          {isGuest && (
+            <p className="text-xs text-gray-600 mt-1">
+              ※ ゲストは画像のサーバ保存とダウンロードができません。登録すると解放されます。
+            </p>
+          )}
+
+          {isGuest && isTrial && <TrialNotice className="w-full mt-2" />}
+
           {isUploading && <p className="text-xs text-blue-600">アップロード中…</p>}
           {uploadDoneMsg && <span className="text-green-700 text-sm">{uploadDoneMsg}</span>}
           {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
         </div>
 
-  
-        <textarea
-          value={text}
-          onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
-          rows={10}
-          className="w-full border p-2 rounded min-h-[180px] max-h=[60vh] overflow-auto resize-y"
-          disabled={isProcessing || isUploading}
-          placeholder="作成時の caption / Why / What / Next がここにまとまって入ります。自由に編集できます。"
-        /> 
+        {/* ★ ゲストは後半ぼかしのプレビュー、会員は編集用テキストエリア */}
+        {isGuest ? (
+          <div className="w-full border rounded p-3">
+            <h3 className="font-semibold mb-2 text-sm">プレビュー</h3>
+            <BlurredTextPreview
+              text={text}
+              limit={500}
+              onUnlock={() => router.push('/signup')}
+            />
+          </div>
+        ) : (
+          <textarea
+            value={text}
+            onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
+            rows={10}
+            className="w-full border p-2 rounded min-h-[180px] max-h-[60vh] overflow-auto resize-y"
+            disabled={isProcessing || isUploading}
+            placeholder="作成時の caption / Why / What / Next がここにまとまって入ります。自由に編集できます。"
+          />
+        )}
       </div>
+
+      {/* 固定フッターの操作群 */}
       <div
         className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen"
         style={{ bottom: `calc(${kbOffset}px + env(safe-area-inset-bottom))` }}
       >
         <div
           className="
-            mx-auto w-full
-            max-w-[min(100vw,420px)]   /* 端末幅を超えない上限 */
-            px-2 py-2
-            grid gap-2 items-center
-            grid-cols-1                 /* 超狭い端末は1列 */
-            min-[380px]:grid-cols-2     /* 380px以上で2列 */
-            sm:grid-cols-4              /* 640px以上で4列 */
+            mx-auto w-full max-w-[min(100vw,420px)]
+            px-2 py-2 grid gap-2 items-center
+            grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-4
           "
         >
           {/* 幅 */}
@@ -241,17 +309,16 @@ export default function PostDetailPage() {
             </select>
           </label>
 
-          {/* ダウンロード */}
-          <button
-            onClick={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
+          {/* ダウンロード：会員のみ実行（ゲート） */}
+          <MemberGateButton
+            onAllow={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
+            labelMember="ダウンロード"
+            labelGuest="新規登録はこちら"
             className="w-full text-sm bg-black text-white px-2 py-2 rounded hover:bg-gray-800 disabled:opacity-50"
             disabled={isProcessing || isUploading}
-          >
-            ダウンロード
-          </button>
+          />
         </div>
       </div>
-
     </main>
   );
 }
