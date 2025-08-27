@@ -68,7 +68,7 @@ export default function Home() {
           </div>
         </div>
         <p className="text-center text-gray-700 text-sm">
-          わずか３ステップで自己表現が習慣に
+          わずか３ステップで自己表現が習慣に！
         </p>
         <div className="flex justify-center">
           <Image
