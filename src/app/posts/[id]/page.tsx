@@ -1,7 +1,6 @@
-// src/app/posts/[id]/page.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
@@ -11,7 +10,8 @@ import MemberGateButton from '@/app/_components/MemberGateButton';
 import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
 import BlurredTextPreview from '@/app/_components/BlurredTextPreview';
 import TrialNotice from '@/app/_components/TrialNotice';
-
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faXTwitter, faThreads } from "@fortawesome/free-brands-svg-icons";
 
 type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
 type ApiImage = { id: number; imageKey: string; signedUrl?: string };
@@ -29,19 +29,13 @@ function parsePost(resp: unknown): ApiPost | null {
 }
 
 function buildEditorSeed(post: ApiPost): string {
-  const parts: string[] = [];
-  const push = (v?: string | null) => { if (typeof v === 'string' && v.trim() !== '') parts.push(v.trim()); };
-  push(post.caption);
-  push(post.memo?.answerWhy ?? null);
-  push(post.memo?.answerWhat ?? null);
-  push(post.memo?.answerNext ?? null);
-  return parts.join('\n');
+  return typeof post.caption === 'string' ? post.caption : '';
 }
 
-/** ★ 追加：ゲスト用一時下書きの型と結合関数 */
-type GuestDraft = { caption: string; answerWhy: string; answerWhat: string; answerNext: string };
+type GuestDraft = { caption: string };
+
 function buildSeedFromDraft(d: GuestDraft): string {
-  return [d.caption, d.answerWhy, d.answerWhat, d.answerNext].filter((s) => s && s.trim() !== '').join('\n');
+  return typeof d.caption === 'string' ? d.caption : '';
 }
 
 export default function PostDetailPage() {
@@ -53,9 +47,9 @@ export default function PostDetailPage() {
 
   const searchParams = useSearchParams();
   const isTrial = searchParams.has('trial');
-  const router = useRouter(); // BlurredTextPreview の onUnlock で使用
+  const router = useRouter();
 
-  const userEditedRef = useRef(false); // ← 早めに定義しておく
+  const userEditedRef = useRef(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const {
@@ -72,12 +66,30 @@ export default function PostDetailPage() {
     setFontSize,
   } = useImageOverlayEditor({ postId });
 
+  // 既存: X用
+  const xShareUrl = useMemo(() => {
+    const t = (text ?? '').slice(0, 280);
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${t}\n\n${url}` : t;
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`;
+  }, [text]);
+
+  // 新規: Threads用（公式の intent エンドポイント）
+  const threadsShareUrl = useMemo(() => {
+    const t = (text ?? '').slice(0, 500); // Threadsは長めでもOK。保守的に500字に丸め
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${t}\n\n${url}` : t;
+    const params = new URLSearchParams({ text: combined });
+    return `https://www.threads.net/intent/post?${params.toString()}`;
+  }, [text]);
+
+
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
   const [kbOffset, setKbOffset] = useState(0);
 
-  // キーボード検知（固定フッターの避け）
+  // キーボード検知
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -100,7 +112,7 @@ export default function PostDetailPage() {
     }
   }, [initFromPost, isTrial, postId]);
 
-  // DBからメモを初期反映（ゲストtrialで既にローカル反映済みなら userEditedRef により上書きしない）
+  // DBから初期反映
   useEffect(() => {
     if (!token || !postId) return;
     (async () => {
@@ -122,7 +134,7 @@ export default function PostDetailPage() {
     })();
   }, [token, postId, setText]);
 
-  // ★ ゲスト & trial のときは sessionStorage の下書きを最優先で反映
+  // ゲスト trial は sessionStorage を優先
   useEffect(() => {
     if (!isGuest || !isTrial) return;
     try {
@@ -131,7 +143,7 @@ export default function PostDetailPage() {
       const draft = JSON.parse(raw) as GuestDraft;
       const seed = buildSeedFromDraft(draft);
       if (seed.trim() !== '') {
-        userEditedRef.current = true; // DBメモで上書きされないように先に立てる
+        userEditedRef.current = true;
         setText(seed);
       }
     } catch {
@@ -143,31 +155,23 @@ export default function PostDetailPage() {
     void drawOnCanvas(canvasRef.current);
   }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
-  // 選択 → まずローカルプレビュー（ゲストもOK）→ 会員だけサーバ保存
+  // 画像アップロード
   const uploadFiles = async (files: File[]): Promise<void> => {
     if (files.length === 0) return;
-
-    // ① 全員：ローカルプレビュー
     for (const file of files) {
       void previewLocalFile(file);
     }
-
-    // ② ゲストはここで終了（サーバ保存はしない）
     if (isGuest) {
       setUploadError('画像のサーバ保存は会員限定です。登録すると保存できます。');
       return;
     }
-
-    // ③ 会員のみサーバ保存
     if (!token) {
       setUploadError('ログイン情報が取得できませんでした');
       return;
     }
-
     setIsUploading(true);
     setUploadError(null);
     setUploadDoneMsg(null);
-
     try {
       for (const file of files) {
         const fd = new FormData();
@@ -179,8 +183,7 @@ export default function PostDetailPage() {
         });
         if (!res.ok) {
           const data: unknown = await res.json().catch(() => ({}));
-          const msg =
-            (data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`;
+          const msg = (data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`;
           throw new Error(msg);
         }
       }
@@ -193,13 +196,12 @@ export default function PostDetailPage() {
     }
   };
 
-
   return (
     <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black pb-40 sm:pb-32">
       <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
 
       <div className="space-y-4 w-full flex flex-col items-center">
-        {/* キャンバスは WatermarkOverlay で包んだ1つに統一 */}
+        {/* キャンバス */}
         <WatermarkOverlay>
           <canvas
             ref={canvasRef}
@@ -209,7 +211,7 @@ export default function PostDetailPage() {
           />
         </WatermarkOverlay>
 
-        {/* 画像選択：ゲストも選択OK／会員はサーバ保存まで */}
+        {/* 画像選択 */}
         <div className="w-full flex flex-col items-center gap-2">
           <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
             ギャラリー / ファイル選択
@@ -236,7 +238,7 @@ export default function PostDetailPage() {
           {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
         </div>
 
-        {/* ★ ゲストは後半ぼかしのプレビュー、会員は編集用テキストエリア */}
+        {/* テキスト（ゲストはぼかし） */}
         {isGuest ? (
           <div className="w-full border rounded p-3">
             <h3 className="font-semibold mb-2 text-sm">プレビュー</h3>
@@ -253,12 +255,35 @@ export default function PostDetailPage() {
             rows={10}
             className="w-full border p-2 rounded min-h-[180px] max-h-[60vh] overflow-auto resize-y"
             disabled={isProcessing || isUploading}
-            placeholder="作成時の caption / Why / What / Next がここにまとまって入ります。自由に編集できます。"
+            placeholder="作成時の caption がここに入ります。自由に編集できます。"
           />
         )}
+
+        {/* Xでシェア */}
+        <a
+          href={xShareUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition"
+        >
+          <FontAwesomeIcon icon={faXTwitter} />
+          Xでシェア
+        </a>
+
+        {/* Threadsでシェア */}
+        <a
+          href={threadsShareUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded hover:opacity-80 transition"
+        >
+          <FontAwesomeIcon icon={faThreads} />
+          Threadsでシェア
+        </a>
+
       </div>
 
-      {/* 固定フッターの操作群 */}
+      {/* 固定フッター */}
       <div
         className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen"
         style={{ bottom: `calc(${kbOffset}px + env(safe-area-inset-bottom))` }}
@@ -309,7 +334,7 @@ export default function PostDetailPage() {
             </select>
           </label>
 
-          {/* ダウンロード：会員のみ実行（ゲート） */}
+          {/* ダウンロード（会員のみ） */}
           <MemberGateButton
             onAllow={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
             labelMember="ダウンロード"
