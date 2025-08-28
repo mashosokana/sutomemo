@@ -1,22 +1,30 @@
 // src/app/login/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 
+// 親：Suspense だけを担う（ここでは useSearchParams を呼ばない）
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+// 子：実際のフォーム本体（ここで useSearchParams を使う）
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 1) next を相対パスに限定して安全化
+  // next を相対パスに限定（セキュリティ）
   const rawNext = searchParams.get('next') || '/dashboard';
-  const nextParam = rawNext.startsWith('/') && !rawNext.startsWith('//')
-    ? rawNext
-    : '/dashboard';
+  const nextParam = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/dashboard';
 
-  // 2) 既ログインなら自動遷移（他ページのガードと整合）
+  // 既ログインなら自動遷移（他ページのガードと整合）
   const { token, isLoading } = useSupabaseSession();
   useEffect(() => {
     if (isLoading) return;
@@ -38,7 +46,7 @@ export default function LoginPage() {
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(), // 余計な空白対策
+      email: email.trim(),
       password,
     });
 
@@ -49,7 +57,6 @@ export default function LoginPage() {
       return;
     }
 
-    // useSupabaseSession が即座に追随するので、ここでは遷移のみでOK
     router.replace(nextParam);
     router.refresh();
   };
@@ -107,4 +114,5 @@ export default function LoginPage() {
     </main>
   );
 }
+
 
