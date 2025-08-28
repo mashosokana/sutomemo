@@ -1,17 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
+import { useAuthMe } from '@/app/hooks/useAuthMe';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
-import { useAuthMe } from '@/app/hooks/useAuthMe';
 import MemberGateButton from '@/app/_components/MemberGateButton';
 import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
 import BlurredTextPreview from '@/app/_components/BlurredTextPreview';
 import TrialNotice from '@/app/_components/TrialNotice';
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faXTwitter, faThreads } from "@fortawesome/free-brands-svg-icons";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faXTwitter, faThreads } from '@fortawesome/free-brands-svg-icons';
+import { authedFetch } from '@/lib/authedFetch';
 
 type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
 type ApiImage = { id: number; imageKey: string; signedUrl?: string };
@@ -27,37 +28,46 @@ function parsePost(resp: unknown): ApiPost | null {
   const images = Array.isArray(p.images) ? (p.images as ApiImage[]) : [];
   return id ? { id, caption, memo, images } : null;
 }
-
 function buildEditorSeed(post: ApiPost): string {
   return typeof post.caption === 'string' ? post.caption : '';
 }
-
 type GuestDraft = { caption: string };
-
 function buildSeedFromDraft(d: GuestDraft): string {
   return typeof d.caption === 'string' ? d.caption : '';
 }
 
+// 最初の1枚だけ採用
+function pickFirstImageUrl(post: ApiPost | null): string | null {
+  if (!post) return null;
+  const first = (post.images ?? []).find(img => typeof img.signedUrl === 'string' && img.signedUrl);
+  return first?.signedUrl ?? null;
+}
+
 export default function PostDetailPage() {
+  // ---- Hooks（順序固定・無条件）----
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
-  const { token } = useSupabaseSession();
-  const { data: me } = useAuthMe();
-  const isGuest = me?.isGuest ?? false;
-
-  const searchParams = useSearchParams();
-  const isTrial = searchParams.has('trial');
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isTrial = searchParams.has('trial'); // 体験モード
+
+  const { token, isLoading: tokenLoading } = useSupabaseSession();
+  const { data: me, loading: meLoading } = useAuthMe();
+
+  // 体験 or 非ログイン はゲストUI（ぼかし等）扱い
+  const isGuest = isTrial || !token;
+  // シェア禁止の厳密判定：体験 or ゲストログイン or me読込中は NG
+  const isGuestUser = isTrial || me?.isGuest === true;
 
   const userEditedRef = useRef(false);
-
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastLoadedUrlRef = useRef<string | null>(null);
+
   const {
     text, setText,
     textBoxSize, setTextBoxSize,
     dragOffset,
     isProcessing,
-    initFromPost,
     drawOnCanvas,
     bindCanvasDrag,
     downloadCanvas,
@@ -66,77 +76,69 @@ export default function PostDetailPage() {
     setFontSize,
   } = useImageOverlayEditor({ postId });
 
-  // 既存: X用
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
+
+  // ★ shareDisabled は依存する変数定義の「後」で1回だけ定義（再宣言しない）
+  const shareDisabled = isProcessing || isUploading || isGuestUser || meLoading;
+
+  // 共有URL
   const xShareUrl = useMemo(() => {
     const t = (text ?? '').slice(0, 280);
     const url = typeof window !== 'undefined' ? window.location.href : '';
     const combined = url ? `${t}\n\n${url}` : t;
     return `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`;
   }, [text]);
-
-  // 新規: Threads用（公式の intent エンドポイント）
   const threadsShareUrl = useMemo(() => {
-    const t = (text ?? '').slice(0, 500); // Threadsは長めでもOK。保守的に500字に丸め
+    const t = (text ?? '').slice(0, 500);
     const url = typeof window !== 'undefined' ? window.location.href : '';
     const combined = url ? `${t}\n\n${url}` : t;
     const params = new URLSearchParams({ text: combined });
     return `https://www.threads.net/intent/post?${params.toString()}`;
   }, [text]);
 
-
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
-  const [kbOffset, setKbOffset] = useState(0);
-
-  // キーボード検知
+  // 非トライアル時のみ：未ログインは /login へ
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      const hidden = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
-      setKbOffset(hidden);
-    };
-    update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isTrial && postId > 0) {
-      void initFromPost();
+    if (isTrial) return;
+    if (tokenLoading) return;
+    if (token === null) {
+      const next = typeof window !== 'undefined'
+        ? window.location.pathname + window.location.search
+        : `/posts/${postId}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
     }
-  }, [initFromPost, isTrial, postId]);
+  }, [isTrial, tokenLoading, token, router, postId]);
 
-  // DBから初期反映
+  // 通常読み込み：ログイン時のみ投稿＆最初の1枚を取得
   useEffect(() => {
-    if (!token || !postId) return;
+    if (!token || !postId || isTrial) return;
     (async () => {
       try {
-        const res = await fetch(`/api/posts/${postId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store',
-        });
+        const res = await authedFetch(`/api/posts/${postId}`, token, { cache: 'no-store' });
         if (!res.ok) return;
         const json: unknown = await res.json().catch(() => null);
         const post = parsePost(json);
-        if (!post) return;
-        if (!userEditedRef.current) {
+
+        if (post && !userEditedRef.current) {
           setText(buildEditorSeed(post));
         }
-      } catch {
-        // silent
-      }
-    })();
-  }, [token, postId, setText]);
 
-  // ゲスト trial は sessionStorage を優先
+        const url = pickFirstImageUrl(post);
+        if (!url || url === lastLoadedUrlRef.current) return;
+        const r = await fetch(url);
+        if (!r.ok) return;
+        const blob = await r.blob();
+        const file = new File([blob], `post-${postId}-first.jpg`, { type: blob.type || 'image/jpeg' });
+        void previewLocalFile(file);
+        lastLoadedUrlRef.current = url;
+      } catch {}
+    })();
+  }, [token, postId, isTrial, setText, previewLocalFile]);
+
+  // 体験：AIメモを sessionStorage から反映
   useEffect(() => {
-    if (!isGuest || !isTrial) return;
+    if (!isTrial) return;
     try {
       const raw = sessionStorage.getItem('guestDraft');
       if (!raw) return;
@@ -146,29 +148,53 @@ export default function PostDetailPage() {
         userEditedRef.current = true;
         setText(seed);
       }
-    } catch {
-      // silent
-    }
-  }, [isGuest, isTrial, setText]);
+    } catch {}
+  }, [isTrial, setText]);
 
+  // キャンバス再描画
   useEffect(() => {
+    if (!canvasRef.current) return;
     void drawOnCanvas(canvasRef.current);
   }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
 
-  // 画像アップロード
+  // 表示許可：トライアルは常にOK / 通常はログイン時のみ
+  const canUsePage = isTrial || (!tokenLoading && !!token);
+  if (!canUsePage) return null;
+
+  // 画像：サーバ保存後も「最初の1枚だけ」で再反映
+  const reloadFirstImage = async () => {
+    if (!token || isTrial) return;
+    try {
+      const res = await authedFetch(`/api/posts/${postId}`, token, { cache: 'no-store' });
+      if (!res.ok) return;
+      const post = parsePost(await res.json().catch(() => null));
+      const url = pickFirstImageUrl(post);
+      if (!url || url === lastLoadedUrlRef.current) return;
+      const r = await fetch(url);
+      if (!r.ok) return;
+      const blob = await r.blob();
+      const file = new File([blob], `post-${postId}-first.jpg`, { type: blob.type || 'image/jpeg' });
+      void previewLocalFile(file);
+      lastLoadedUrlRef.current = url;
+    } catch {}
+  };
+
   const uploadFiles = async (files: File[]): Promise<void> => {
     if (files.length === 0) return;
-    for (const file of files) {
-      void previewLocalFile(file);
-    }
-    if (isGuest) {
+
+    if (isTrial) {
+      if (files[0]) void previewLocalFile(files[0]);
       setUploadError('画像のサーバ保存は会員限定です。登録すると保存できます。');
       return;
     }
+
     if (!token) {
       setUploadError('ログイン情報が取得できませんでした');
       return;
     }
+
+    for (const file of files) void previewLocalFile(file);
+
     setIsUploading(true);
     setUploadError(null);
     setUploadDoneMsg(null);
@@ -176,11 +202,7 @@ export default function PostDetailPage() {
       for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
-        const res = await fetch(`/api/posts/${postId}/images`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        });
+        const res = await authedFetch(`/api/posts/${postId}/images`, token, { method: 'POST', body: fd });
         if (!res.ok) {
           const data: unknown = await res.json().catch(() => ({}));
           const msg = (data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`;
@@ -188,7 +210,7 @@ export default function PostDetailPage() {
         }
       }
       setUploadDoneMsg('画像をアップロードしました');
-      await initFromPost();
+      await reloadFirstImage();
     } catch (e: unknown) {
       setUploadError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -201,7 +223,6 @@ export default function PostDetailPage() {
       <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
 
       <div className="space-y-4 w-full flex flex-col items-center">
-        {/* キャンバス */}
         <WatermarkOverlay>
           <canvas
             ref={canvasRef}
@@ -211,7 +232,6 @@ export default function PostDetailPage() {
           />
         </WatermarkOverlay>
 
-        {/* 画像選択 */}
         <div className="w-full flex flex-col items-center gap-2">
           <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
             ギャラリー / ファイル選択
@@ -225,20 +245,14 @@ export default function PostDetailPage() {
             />
           </label>
 
-          {isGuest && (
-            <p className="text-xs text-gray-600 mt-1">
-              ※ ゲストは画像のサーバ保存とダウンロードができません。登録すると解放されます。
-            </p>
-          )}
-
-          {isGuest && isTrial && <TrialNotice className="w-full mt-2" />}
+          {isTrial && <TrialNotice className="w-full mt-2" />}
 
           {isUploading && <p className="text-xs text-blue-600">アップロード中…</p>}
           {uploadDoneMsg && <span className="text-green-700 text-sm">{uploadDoneMsg}</span>}
           {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
         </div>
 
-        {/* テキスト（ゲストはぼかし） */}
+        {/* ゲストはテキストぼかし */}
         {isGuest ? (
           <div className="w-full border rounded p-3">
             <h3 className="font-semibold mb-2 text-sm">プレビュー</h3>
@@ -259,35 +273,60 @@ export default function PostDetailPage() {
           />
         )}
 
-        {/* Xでシェア */}
-        <a
-          href={xShareUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition"
-        >
-          <FontAwesomeIcon icon={faXTwitter} />
-          Xでシェア
-        </a>
+        {/* ▼ シェア（ゲスト/体験/読込中は必ず動かない） */}
+        {isGuestUser || meLoading ? (
+          <>
+            <button
+              onClick={() => router.push('/signup')}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white rounded opacity-70 cursor-not-allowed"
+              aria-disabled
+            >
+              Xでシェア
+            </button>
+            <button
+              onClick={() => router.push('/signup')}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded opacity-70 cursor-not-allowed"
+              aria-disabled
+            >
+              Threadsでシェア
+            </button>
+          </>
+        ) : (
+          <>
+            <a
+              href={xShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (shareDisabled) { e.preventDefault(); router.push('/signup'); }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition ${
+                shareDisabled ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <FontAwesomeIcon icon={faXTwitter} />
+              Xでシェア
+            </a>
 
-        {/* Threadsでシェア */}
-        <a
-          href={threadsShareUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded hover:opacity-80 transition"
-        >
-          <FontAwesomeIcon icon={faThreads} />
-          Threadsでシェア
-        </a>
-
+            <a
+              href={threadsShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (shareDisabled) { e.preventDefault(); router.push('/signup'); }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded hover:opacity-80 transition ${
+                shareDisabled ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <FontAwesomeIcon icon={faThreads} />
+              Threadsでシェア
+            </a>
+          </>
+        )}
       </div>
 
-      {/* 固定フッター */}
-      <div
-        className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen"
-        style={{ bottom: `calc(${kbOffset}px + env(safe-area-inset-bottom))` }}
-      >
+      <div className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen bottom-0">
         <div
           className="
             mx-auto w-full max-w-[min(100vw,420px)]
@@ -295,7 +334,6 @@ export default function PostDetailPage() {
             grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-4
           "
         >
-          {/* 幅 */}
           <label className="flex flex-col gap-1 min-w-0">
             <span className="text-xs">幅</span>
             <input
@@ -307,7 +345,6 @@ export default function PostDetailPage() {
             />
           </label>
 
-          {/* 高さ */}
           <label className="flex flex-col gap-1 min-w-0">
             <span className="text-xs">高さ</span>
             <input
@@ -319,7 +356,6 @@ export default function PostDetailPage() {
             />
           </label>
 
-          {/* 文字サイズ */}
           <label className="flex flex-col gap-1 min-w-0">
             <span className="text-xs">サイズ</span>
             <select
@@ -334,7 +370,6 @@ export default function PostDetailPage() {
             </select>
           </label>
 
-          {/* ダウンロード（会員のみ） */}
           <MemberGateButton
             onAllow={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
             labelMember="ダウンロード"
