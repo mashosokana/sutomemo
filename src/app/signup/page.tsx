@@ -41,7 +41,9 @@ export default function SignUpPage() {
         },
       })
 
-      console.log('SignUp Result:', { data, error })
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('SignUp Result:', { data, error });
+        }
 
       if (error) {
         setErrorMessage(error.message)

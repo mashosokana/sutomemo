@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyUser } from "@/lib/auth";
+import { jsonNoStore, jsonError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,28 +27,17 @@ const platformRule = (p: "x" | "threads") =>
   p === "x" ? "280字以内/改行≤3/箇条書き2-4" : "500字以内/改行≤6/箇条書き3-6";
 
 export async function POST(req: NextRequest) {
-  // 1) 認証（ゲストは通過してOK：保存側でガード）
-  await verifyUser(req);
-
-  // 2) 入力検証（400で返す）
+  const { user, status, error } = await verifyUser(req as unknown as Request);
+  if (!user) return jsonNoStore({ error: error ?? "Unauthorized" }, { status });
+    
   const body = await req.json();
   const parsed = Body.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid request", details: parsed.error.flatten() },
-      { status: 400, headers: { "Cache-Control": "no-store" } }
-    );
-  }
+  if (!parsed.success) return jsonNoStore({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 });
   const { memo, platform, variants } = parsed.data;
 
   // 3) 環境変数チェック
   const API_KEY = process.env.OPENAI_API_KEY;
-  if (!API_KEY) {
-    return NextResponse.json(
-      { error: "Missing OPENAI_API_KEY" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
-    );
-  }
+  if (!API_KEY) return jsonError(500, "Missing OPENAI_API_KEY");
 
   // 4) プロンプト作成
   const messages = [
@@ -123,8 +113,5 @@ export async function POST(req: NextRequest) {
     posts = [];
   }
 
-  return NextResponse.json(
-    { posts },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  return jsonNoStore({ posts }, { status: 200 });
 }
