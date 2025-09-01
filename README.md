@@ -62,17 +62,6 @@ SNSや学習メモを**最短でアウトプット**するための個人開発�
 
 > 章立てや見せ方は、サンプルREADMEの体裁を参考にしています。:contentReference[oaicite:1]{index=1}
 
----
-
-## システム構成（Mermaid）
-```mermaid
-flowchart LR
-  User((User)) -->|HTTP| Next[Next.js App]
-  Next -->|Auth| SupabaseAuth[Supabase Auth]
-  Next -->|SQL via Prisma| DB[(Supabase PostgreSQL)]
-  Next -->|Deploy| Vercel[Vercel]
-
-
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
