@@ -34,3 +34,56 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+
+
+## システム構成（Mermaid）
+```mermaid
+flowchart LR
+  User((User)) -->|HTTP| Next[Next.js App]
+  Next -->|Auth| SupabaseAuth[Supabase Auth]
+  Next -->|SQL via Prisma| DB[(Supabase PostgreSQL)]
+  Next -->|Deploy| Vercel[Vercel]
+```
+
+## ER図（Mermaid）
+```mermaid
+erDiagram
+  users ||--o{ posts : has
+  users ||--o{ memos : has
+  posts ||--o{ assets : has
+
+  users {
+    uuid id PK
+    text display_name
+    text email
+    timestamp created_at
+  }
+
+  posts {
+    uuid id PK
+    uuid user_id FK
+    text title
+    text body
+    text status
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  memos {
+    uuid id PK
+    uuid user_id FK
+    text answer_why
+    text answer_what
+    text answer_next
+    timestamp created_at
+  }
+
+  assets {
+    uuid id PK
+    uuid post_id FK
+    text url
+    text kind
+    timestamp created_at
+  }
+```
