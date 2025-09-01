@@ -1,3 +1,17 @@
+# SutoMemo
+[![E2E (prod smoke)](https://github.com/mashosokana/sutomemo/actions/workflows/e2e.yml/badge.svg)](https://github.com/mashosokana/sutomemo/actions/workflows/e2e.yml)
+
+**本番**: https://sutomemo.vercel.app  
+**ゲストログイン**: トップの「お試しログイン」ボタンで即体験
+
+**特徴（3つ）**
+- LP → ワンクリック体験 → ダッシュボード（初回30秒）
+- 投稿下書き生成 / 画像オーバーレイ（ウォーターマーク）
+- X / Threads 共有導線 ＋ ふりかえりメモ（Why/What/Next）
+
+
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
