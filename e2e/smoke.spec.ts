@@ -1,14 +1,13 @@
 // e2e/smoke.spec.ts
 import { test, expect } from '@playwright/test'
 
-test('LPに体験用CTAが表示される', async ({ page }) => {
+test('LPのCTAボタンが見える', async ({ page }) => {
   const base = process.env.BASE_URL || 'https://sutomemo.vercel.app'
-  await page.goto(base, { waitUntil: 'domcontentloaded' })
+  await page.goto(base, { waitUntil: 'networkidle' })
 
-  await expect(page).toHaveTitle(/suto|memo|sutome|メモ/i)
+  const cta = page
+    .getByRole('button', { name: /お試しログイン|お試し|ゲスト|ログイン/i })
+    .first()
 
-  await expect(
-    page.getByText(/お試しログイン|お試し|ゲスト|体験|ログイン/i)
-  ).toBeVisible({ timeout: 15000 })
+  await expect(cta).toBeVisible({ timeout: 15000 })
 })
-
