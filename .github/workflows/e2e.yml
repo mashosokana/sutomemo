@@ -1,0 +1,14 @@
+name: E2E (prod smoke)
+on: [push, pull_request]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm i -D @playwright/test
+      - run: npx playwright install --with-deps
+      - name: Run smoke test on prod
+        run: BASE_URL=https://sutomemo.vercel.app npx playwright test e2e/smoke.spec.ts
