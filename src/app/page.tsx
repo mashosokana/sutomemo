@@ -13,15 +13,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const handleGuestLogin = async () => {
+    if (loading) return;
     try {
       setLoading(true);
 
       const res = await fetch('/api/auth/guest-login', { method: 'POST' });
-      const body = await res.json();
+      const body = await res.json().catch(() => null);
 
       if (!res.ok) {
         alert(`ログイン失敗: ${body?.error ?? res.statusText}`);
-        setLoading(false);
         return;
       }
 
@@ -32,13 +32,14 @@ export default function Home() {
         });
         if (error) {
           alert(`セッション同期失敗: ${error.message}`);
-          setLoading(false);
           return;
         }
+      } else {
+        alert('ログイン失敗: トークンが取得できませんでした');
+        return;
       }
 
       router.replace('/dashboard');
-      router.refresh();
     } catch (err) {
       console.error(err);
       alert('ログイン失敗: ネットワークエラー');
