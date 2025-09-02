@@ -20,13 +20,19 @@
 
 ## スクリーンショット
 
-| トップ(LP) | ダッシュボード |
-|---|---|
-| ![lp](docs/img/lp.png) | ![dashboard](docs/img/dashboard.png) |
+<table>
+  <tr>
+    <th>トップ(LP)</th>
+    <th>ダッシュボード</th>
+    <th>画像オーバーレイ</th>
+  </tr>
+  <tr>
+    <td><img src="docs/img/lp.png" alt="LP" width="320"></td>
+    <td><img src="docs/img/dashboard.png" alt="Dashboard" width="320"></td>
+    <td><img src="docs/img/overlay.png" alt="Overlay" width="320"></td>
+  </tr>
+</table>
 
-| 画像オーバーレイ |
-|---|
-| ![overlay](docs/img/overlay.png) |
 
 ---
 
