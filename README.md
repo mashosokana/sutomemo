@@ -29,7 +29,7 @@
   <tr>
     <td><img src="docs/img/lp.png" alt="LP" width="320"></td>
     <td><img src="docs/img/dashboard.png" alt="Dashboard" width="320"></td>
-    <td><img src="docs/img/overlay.png" alt="Overlay" width="320"></td>
+    <td><img src="docs/img/overlay2.png" alt="Overlay" width="320"></td>
   </tr>
 </table>
 
