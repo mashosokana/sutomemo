@@ -42,7 +42,9 @@ export default function ImageFileInput({
           picked.map((f) => convertIfHeic(f, to, quality))
         );
 
-        console.table(converted.map(f => ({ name: f.name, type: f.type })));
+        if (process.env.NODE_ENV !== 'production') {
+          console.table(converted.map(f => ({ name: f.name, type: f.type })));
+          }
 
         onPick(converted);
 

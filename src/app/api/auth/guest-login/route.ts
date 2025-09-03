@@ -1,11 +1,9 @@
 // src/app/api/auth/guest-login/route.ts
 import 'server-only';
-import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { jsonNoStore } from '@/lib/http';
 
 export const runtime = 'nodejs';
-
-const noStore = { 'Cache-Control': 'no-store, max-age=0' } as const;
 
 export async function POST() {
   try {
@@ -18,10 +16,7 @@ export async function POST() {
       console.error('[guest-login] env missing', {
         hasEmail: !!email, hasPw: !!password, hasUrl: !!supabaseUrl, hasAnon: !!anonKey,
       });
-      return NextResponse.json(
-        { error: 'server env missing: GUEST_USER_EMAIL/PASSWORD or SUPABASE URL/ANON KEY' },
-        { status: 500, headers: noStore }
-      );
+      return jsonNoStore({ error: 'server env missing: GUEST_USER_EMAIL/PASSWORD or SUPABASE URL/ANON KEY' }, { status: 500 });
     }
 
     const supabase = createClient(supabaseUrl, anonKey, {
@@ -32,26 +27,20 @@ export async function POST() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.session) {
       console.error('[guest-login] signIn error', error);
-      return NextResponse.json(
-        { error: `login failed: ${error?.message || 'no session returned'}` },
-        { status: 401, headers: noStore }
-      );
+      return jsonNoStore({ error: `login failed: ${error?.message || 'no session returned'}` }, { status: 401 });
     }
 
     const { session } = data;
-    return NextResponse.json(
-      {
-        ok: true,
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_at: session.expires_at,     // Unix秒
-        token_type: session.token_type ?? 'bearer',
-        user: { id: session.user.id, email: session.user.email }, // 便利なので付与（不要なら消してOK）
-      },
-      { headers: noStore }
-    );
+    return jsonNoStore({
+      ok: true,
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_at: session.expires_at,
+      token_type: session.token_type ?? 'bearer',
+      user: { id: session.user.id, email: session.user.email },
+    }, { status: 200 });
   } catch (e) {
     console.error('[guest-login] unexpected', e);
-    return NextResponse.json({ error: 'unexpected error' }, { status: 500, headers: noStore });
+    return jsonNoStore({ error: 'unexpected error' }, { status: 500 });
   }
 }

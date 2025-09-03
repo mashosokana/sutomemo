@@ -34,6 +34,7 @@ export default function MemoForm(props: MemoFormProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [gen, setGen] = useState<GenState>({ loading: false, posts: [] });
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const handleSubmit = async (): Promise<void> => {
     setIsSubmitting(true);
@@ -48,6 +49,8 @@ export default function MemoForm(props: MemoFormProps) {
   const handleBuzzPreview = async (): Promise<void> => {
     try {
       if (gen.loading) return;
+      // 新しく生成を開始するので選択状態をリセット
+      setSelectedIdx(null);
       setGen({ loading: true, posts: [] });
 
       // Bearer必須：Supabaseのセッションからトークン取得
@@ -104,6 +107,7 @@ export default function MemoForm(props: MemoFormProps) {
           ? (json.posts as string[])
           : [];
         setGen({ loading: false, posts });
+        setSelectedIdx(null);
     } catch (e) {
       setGen({
         loading: false,
@@ -114,8 +118,9 @@ export default function MemoForm(props: MemoFormProps) {
   };
 
   // 生成案をcaptionに反映
-  const adoptToCaption = (text: string) => {
+  const adoptToCaption = (text: string, index: number) => {
     onCaptionChange(text);
+    setSelectedIdx(index);
     // 必要ならスクロールや通知などを追加
   };
 
@@ -194,20 +199,39 @@ export default function MemoForm(props: MemoFormProps) {
 
         {gen.posts.length > 0 && (
           <div className="grid gap-3">
-            {gen.posts.map((p, i) => (
-              <div key={i} className="rounded border p-3 bg-gray-50">
-                <div className="opacity-70 text-xs mb-2">案 {i + 1}</div>
-                <pre className="whitespace-pre-wrap leading-relaxed">{p}</pre>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={() => adoptToCaption(p)}
-                    className="bg-black text-white px-3 py-1 rounded text-sm hover:opacity-80"
-                  >
-                    この案をcaptionに反映
-                  </button>
+            {gen.posts.map((p, i) => {
+              const isSelected = selectedIdx === i;
+              const cardClass = isSelected
+                ? "rounded border p-3 bg-blue-50 border-blue-500 ring-1 ring-blue-400"
+                : "rounded border p-3 bg-gray-50";
+              return (
+                <div key={i} className={cardClass}>
+                  <div className="flex items-center gap-2 opacity-70 text-xs mb-2">
+                    <span>案 {i + 1}</span>
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-600" />
+                        選択中
+                      </span>
+                    )}
+                  </div>
+                  <pre className="whitespace-pre-wrap leading-relaxed">{p}</pre>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => adoptToCaption(p, i)}
+                      className={
+                        isSelected
+                          ? "bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm cursor-default"
+                          : "bg-black text-white px-3 py-1 rounded text-sm hover:opacity-80"
+                      }
+                      disabled={isSelected}
+                    >
+                      {isSelected ? "文章に反映済み" : "この文章を選択"}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

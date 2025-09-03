@@ -1,11 +1,11 @@
 // src/app/api/posts/[id]/route.ts
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma, Image as DbImage } from "@prisma/client";
 import { IMAGE_BUCKET } from "@/lib/buckets";
 import { getPublicThumbUrl } from "@/lib/images";
 import { verifyUser } from "@/lib/auth";
+import { jsonNoStore } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,10 +33,10 @@ function isGuestEmail(email?: string | null): boolean {
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const { user, error, status } = await verifyUser(req);
-    if (!user) return NextResponse.json({ error }, { status });
+    if (!user) return jsonNoStore({ error }, { status });
 
     const { postId, error: idError } = parsePostId(params);
-    if (!postId) return NextResponse.json({ error: idError }, { status: 400 });
+    if (!postId) return jsonNoStore({ error: idError }, { status: 400 });
 
     const where: Prisma.PostWhereInput =
     user.role === "ADMIN" ? { id: postId } : { id: postId, userId: user.id };
@@ -45,7 +45,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       where,
       include: { memo: true, images: { orderBy: { generatedAt: "desc" } } },
     });
-    if (!post) return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
+    if (!post) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
 
     const nonHeicImages = post.images.filter((img: DbImage) => isNonHeic(img.imageKey));
     const imagesWithSignedUrls = await Promise.all(
@@ -62,13 +62,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const firstSigned = nonEmpty(imagesWithSignedUrls[0]?.signedUrl);
     const imageUrl = nonEmpty(thumbUrl) ?? firstSigned;
 
-    return NextResponse.json(
-      { post: { ...post, images: imagesWithSignedUrls, ...(imageUrl ? { imageUrl } : {}) } },
-      { status: 200 }
-    );
+    return jsonNoStore({ post: { ...post, images: imagesWithSignedUrls, ...(imageUrl ? { imageUrl } : {}) } }, { status: 200 });
   } catch (e) {
     console.error("GET /posts/[id] error:", e);
-    return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
+    return jsonNoStore({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
 
@@ -76,18 +73,18 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const { user, error, status } = await verifyUser(req);
-    if (!user) return NextResponse.json({ error }, { status });
+    if (!user) return jsonNoStore({ error }, { status });
 
     const { postId, error: idError } = parsePostId(params);
-    if (!postId) return NextResponse.json({ error: idError }, { status: 400 });
+    if (!postId) return jsonNoStore({ error: idError }, { status: 400 });
 
     const target = await prisma.post.findUnique({
       where: { id: postId },
       select: { id: true, userId: true },
     });
-    if (!target) return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
+    if (!target) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
     if (user.role !== "ADMIN" && target.userId !== user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return jsonNoStore({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -101,7 +98,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const answerNext = typeof memoLike?.answerNext === "string" ? memoLike.answerNext : null;
 
     if (caption === undefined && thumbnailImageKey === undefined && memoLike === undefined) {
-      return NextResponse.json({ error: "更新項目がありません" }, { status: 400 });
+      return jsonNoStore({ error: "更新項目がありません" }, { status: 400 });
     }
 
     const data: Prisma.PostUpdateInput = {};
@@ -117,10 +114,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       include: { memo: true, images: true },
     });
 
-    return NextResponse.json({ post: updatedPost }, { status: 200 });
+    return jsonNoStore({ post: updatedPost }, { status: 200 });
   } catch (e) {
     console.error("PUT /posts/[id] error:", e);
-    return NextResponse.json({ error: "更新処理で予期しないエラーが発生しました" }, { status: 500 });
+    return jsonNoStore({ error: "更新処理で予期しないエラーが発生しました" }, { status: 500 });
   }
 }
 
@@ -128,22 +125,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const { user, error, status } = await verifyUser(req);
-    if (!user) return NextResponse.json({ error }, { status });
+    if (!user) return jsonNoStore({ error }, { status });
 
     const { postId, error: idError } = parsePostId(params);
-    if (!postId) return NextResponse.json({ error: idError }, { status: 400 });
+    if (!postId) return jsonNoStore({ error: idError }, { status: 400 });
 
     const target = await prisma.post.findUnique({
       where: { id: postId },
       include: { images: true },
     });
-    if (!target) return NextResponse.json({ error: "投稿が存在しません" }, { status: 404 });
+    if (!target) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
     if (user.role !== "ADMIN" && isGuestEmail(user.email)) {
-      return NextResponse.json({ error: "お試しログインでは削除できません" }, { status: 403 });
+      return jsonNoStore({ error: "お試しログインでは削除できません" }, { status: 403 });
     }
 
     if (user.role !== "ADMIN" && target.userId !== user.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return jsonNoStore({ error: "Forbidden" }, { status: 403 });
     }
 
     const imageKeys = target.images.map((img) => img.imageKey).filter(Boolean);
@@ -158,9 +155,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       await tx.post.delete({ where: { id: postId } });
     });
 
-    return NextResponse.json({ success: true, deletedId: postId }, { status: 200 });
+    return jsonNoStore({ success: true, deletedId: postId }, { status: 200 });
   } catch (e) {
     console.error("DELETE /posts/[id] error:", e);
-    return NextResponse.json({ error: "削除処理で予期しないエラーが発生しました" }, { status: 500 });
+    return jsonNoStore({ error: "削除処理で予期しないエラーが発生しました" }, { status: 500 });
   }
 }

@@ -16,7 +16,9 @@ export const useSupabaseSession = () => {
     const timer = setTimeout(() => {
       const fetchSession = async () => {
         const { data, error } = await supabase.auth.getSession()
-        console.log("遅延後のセッション取得:", data.session, error)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log("遅延後のセッション取得:", data.session, error);
+          }
         setSession(data.session)
         setToken(data.session?.access_token || null)
         setIsLoading(false)
@@ -27,7 +29,9 @@ export const useSupabaseSession = () => {
 
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("onAuthStateChange:", session)
+      if (process.env.NODE_ENV !== 'production') {
+        console.log("onAuthStateChange:", session);
+        }
       setSession(session)
       setToken(session?.access_token || null)
       setIsLoading(false)

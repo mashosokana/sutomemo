@@ -1,11 +1,13 @@
 // src/app/api/admin/guest-posts/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma } from "@prisma/client";
 import { requireAdminOrThrow } from "@/lib/auth";
+import { IMAGE_BUCKET } from "@/lib/buckets";
 import { ensureGuestUser } from "@/lib/guestUser"; 
 import { PostStatus } from "@prisma/client";                  
+import { jsonNoStore } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,10 +75,10 @@ export async function GET(req: NextRequest) {
         : null,
     }));
 
-    return NextResponse.json({ target, posts: items }, { status: 200 });
+    return jsonNoStore({ target, posts: items }, { status: 200 });
   } catch (err: unknown) {
     const { status, message } = toHttpError(err);
-    return NextResponse.json({ error: message }, { status });
+    return jsonNoStore({ error: message }, { status });
   }
 }
 
@@ -89,7 +91,7 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const ids: unknown = body?.ids;
     if (!Array.isArray(ids) || ids.some((x) => typeof x !== "number")) {
-      return NextResponse.json({ error: "ids must be number[]" }, { status: 400 });
+      return jsonNoStore({ error: "ids must be number[]" }, { status: 400 });
     }
 
     const targetPosts = await prisma.post.findMany({
@@ -100,7 +102,7 @@ export async function DELETE(req: NextRequest) {
     const allKeys = targetPosts.flatMap((p) => p.images.map((i) => i.imageKey));
     let removedFiles = 0;
     if (allKeys.length > 0) {
-      const { error: rmErr } = await supabaseAdmin.storage.from("post-images").remove(allKeys);
+      const { error: rmErr } = await supabaseAdmin.storage.from(IMAGE_BUCKET).remove(allKeys);
       if (rmErr) {
         // eslint-disable-next-line no-console
         console.warn("Storage remove error:", rmErr.message);
@@ -117,10 +119,10 @@ export async function DELETE(req: NextRequest) {
       return res.count;
     });
 
-    return NextResponse.json({ deleted, removedFiles }, { status: 200 });
+    return jsonNoStore({ deleted, removedFiles }, { status: 200 });
   } catch (err: unknown) {
     const { status, message } = toHttpError(err);
-    return NextResponse.json({ error: message }, { status });
+    return jsonNoStore({ error: message }, { status });
   }
 }
 
@@ -177,9 +179,9 @@ export async function POST(req: NextRequest) {
       return items;
     });
 
-    return NextResponse.json({ created }, { status: 201 });
+    return jsonNoStore({ created }, { status: 201 });
   } catch (err: unknown) {
     const { status, message } = toHttpError(err);
-    return NextResponse.json({ error: message }, { status });
+    return jsonNoStore({ error: message }, { status });
   }
 }

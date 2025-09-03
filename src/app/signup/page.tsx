@@ -11,7 +11,6 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading ] = useState(false)
-
   const router = useRouter()
 
   const isValidPassword = (password: string): boolean => {
@@ -33,23 +32,29 @@ export default function SignUpPage() {
       return
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email, 
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/signup-success`,
-      },
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/signup-success`,
+        },
+      })
 
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('SignUp Result:', { data, error });
+        }
 
-    console.log("SignUp Result:", { data, error })
-
-    setLoading(false);
-
-    if (error) {
-      setErrorMessage(error.message)
-    } else {
-      router.push('/signup-success')
+      if (error) {
+        setErrorMessage(error.message)
+        return
+      }
+      
+      router.replace('/signup-success')
+    } catch {
+      setErrorMessage('登録中に問題が発生しました。時間をおいてお試しください。')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -57,7 +62,8 @@ export default function SignUpPage() {
     <main className='min-h-screen flex items-center justify-center bg-gray-100 px-4'>
       <div className='w-full max-w-md bg-white rounded-2xl shadow-lg p-8'>
         <h1 className='text-2xl font-bold mb-6 text-center'>新規登録</h1>
-        <form onSubmit={handleSubmit} className='space-y-5'>
+        {/* 処理中はフォーム全体が busy */}
+        <form onSubmit={handleSubmit} className='space-y-5' aria-busy={loading}>
           <div>
             <label htmlFor='email' className='block mb-2 text-sm font-medium text-gray-700'>
               メールアドレス
@@ -70,6 +76,7 @@ export default function SignUpPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete='email'
             />
           </div>
 
@@ -85,11 +92,13 @@ export default function SignUpPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete='new-password'
+              aria-describedby='password-note'
             />
           </div>
 
           {errorMessage && (
-            <p className='text-red-500 text-sm text-center'>
+            <p className='text-red-500 text-sm text-center' role='alert' aria-live='assertive'>
               エラー: {errorMessage}
             </p>
           )}
@@ -102,15 +111,16 @@ export default function SignUpPage() {
             {loading ? '登録中...' : '登録'}
           </button>
 
-          <div className='text-sm text-gray-600 mt-4'>
+          <div id='password-note' className='text-sm text-gray-600 mt-4'>
             <p className='font-semibold text-gray-800 mb-1'>注意</p>
             <ul className='list-disc list-inside space-y-1'>
-            <li>8文字以上</li>
+              <li>8文字以上</li>
               <li>アルファベットを含む</li>
               <li>数字を含む</li>
               <li>記号（@ $ ! % * # ? &）を含む</li>
             </ul>
           </div>
+
           <p className='text-sm text-center text-gray-600 mt-6'>
             アカウントをお持ちの方は{' '}
             <Link href='/login' className='text-blue-600 hover:underline font-medium'>
