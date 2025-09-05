@@ -5,36 +5,49 @@
 import { useState } from "react";
 import MemberGateButton from "./MemberGateButton";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import ResultsTabs from "./ResultsTabs";
+import StickyInputsForm from "./StickyInputsForm";
+import type { SocialAll } from "@/app/api/generate/social-post/route";
 
 type MemoFormProps = {
   caption: string;
-  answerWhy: string;
-  answerWhat: string;
-  answerNext: string;
   onCaptionChange: (v: string) => void;
-  onWhyChange: (v: string) => void;
-  onWhatChange: (v: string) => void;
-  onNextChange: (v: string) => void;
   onSubmit: () => Promise<void>;
   submitLabel: string;
   gate?: boolean;
   guestLabel?: string;
+  // deprecated (UI非表示): 残存呼び出し互換のため
+  answerWhy?: string;
+  answerWhat?: string;
+  answerNext?: string;
+  onWhyChange?: (v: string) => void;
+  onWhatChange?: (v: string) => void;
+  onNextChange?: (v: string) => void;
+  // 追加: 書き出し可能タブの制限（未指定なら全タブで可）
+  writeOutOnlyFor?: ("x" | "threads" | "stories")[];
 };
 
-type GenState = { loading: boolean; posts: string[]; error?: string };
+type GenState = { loading: boolean; data: SocialAll | null; error?: string };
 
 export default function MemoForm(props: MemoFormProps) {
-  const {
-    caption, answerWhy, answerWhat, answerNext,
-    onCaptionChange, onWhyChange, onWhatChange, onNextChange,
-    onSubmit, submitLabel, gate = true, guestLabel = "登録して書き出す",
-  } = props;
+  const { onSubmit, submitLabel, gate = true, guestLabel = "登録して書き出す", writeOutOnlyFor } = props;
 
   const supabase = createClientComponentClient();
 
+  // Sticky UI state（空欄OK）
+  const [stickyUI, setStickyUI] = useState({
+    tagline: "",
+    place: "",
+    tool: "",
+    people: "",
+    numbers: "",
+    sense: "",
+    cta: "",
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [gen, setGen] = useState<GenState>({ loading: false, posts: [] });
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [gen, setGen] = useState<GenState>({ loading: false, data: null });
+  const [activeTab, setActiveTab] = useState<"x" | "threads" | "stories" | null>(null);
 
   const handleSubmit = async (): Promise<void> => {
     setIsSubmitting(true);
@@ -49,44 +62,86 @@ export default function MemoForm(props: MemoFormProps) {
   const handleBuzzPreview = async (): Promise<void> => {
     try {
       if (gen.loading) return;
-      // 新しく生成を開始するので選択状態をリセット
-      setSelectedIdx(null);
-      setGen({ loading: true, posts: [] });
+      setGen({ loading: true, data: null });
 
       // Bearer必須：Supabaseのセッションからトークン取得
-      const { data, error } = await supabase.auth.getSession();
+      const { data: sessionData, error } = await supabase.auth.getSession();
       if (error) throw error;
-      const token = data.session?.access_token;
+      const token = sessionData.session?.access_token;
       if (!token) {
         throw new Error("アクセストークンがありません。先にゲストログイン/ログインしてください。");
       }
 
-      // 4つの回答＋captionを1つのメモにまとめる
-      const memoText = [
-        `やったこと/学んだこと:\n${caption}`,
-        `なぜメモしたのか:\n${answerWhy}`,
-        `何が起きた/どう感じたか:\n${answerWhat}`,
-        `次に何をする/教訓:\n${answerNext}`,
-      ].join("\n\n");
+      // Sticky入力からメモ本文を構成（caption入力は撤去）
+      const normalizeLocal = (s: string) => (s ?? "").trim();
+      const nums = (stickyUI.numbers ?? "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const parts: string[] = [];
+      if (normalizeLocal(stickyUI.tagline)) parts.push(`合言葉:\n${normalizeLocal(stickyUI.tagline)}`);
+      if (normalizeLocal(stickyUI.place)) parts.push(`場所:\n${normalizeLocal(stickyUI.place)}`);
+      if (normalizeLocal(stickyUI.tool)) parts.push(`道具:\n${normalizeLocal(stickyUI.tool)}`);
+      if (normalizeLocal(stickyUI.people)) parts.push(`人物:\n${normalizeLocal(stickyUI.people)}`);
+      if (nums.length) parts.push(`数字:\n${nums.join(", ")}`);
+      if (normalizeLocal(stickyUI.sense)) parts.push(`感覚:\n${normalizeLocal(stickyUI.sense)}`);
+      if (normalizeLocal(stickyUI.cta)) parts.push(`CTA:\n${normalizeLocal(stickyUI.cta)}`);
+      const memoText = parts.join("\n\n");
 
       // 事前チェック（最低10文字程度）
       if (memoText.replace(/\s+/g, "").length < 10) {
         setGen({
-           loading: false,
-           posts: [],
-           error: "メモが短すぎます。もう少し内容を書いてから整形してください。",
-         });
-         return;
-       }
+          loading: false,
+          data: { x: [], threads: [], stories: [], posts: [] },
+          error: "メモが短すぎます。もう少し内容を書いてから整形してください。",
+        });
+        return;
+      }
 
       // 生成API呼び出し
+      // sticky: 空欄は送らないように undefined を除外して送る
+      const normalize = (s: string) => {
+        const v = (s ?? "").trim();
+        return v.length > 0 ? v : undefined;
+      };
+      const parseNumbers = (s: string) => {
+        const arr = (s ?? "")
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+        return arr.length > 0 ? arr : undefined;
+      };
+      const omitUndefined = <T extends object>(obj: T): Partial<T> => {
+        type Entries<U> = { [K in keyof U]-?: [K, U[K]] }[keyof U][];
+        const entries = Object.entries(obj).filter(([, v]) => v !== undefined) as Entries<T>;
+        return Object.fromEntries(entries) as Partial<T>;
+      };
+
+      const stickyPayload = omitUndefined({
+        tagline: normalize(stickyUI.tagline),
+        place: normalize(stickyUI.place),
+        tool: normalize(stickyUI.tool),
+        people: normalize(stickyUI.people),
+        numbers: parseNumbers(stickyUI.numbers),
+        sense: normalize(stickyUI.sense),
+        cta: normalize(stickyUI.cta),
+      });
+
+      const body = {
+        memo: memoText,
+        platform: "x" as const,
+        variants: 2 as const,
+        sticky: Object.keys(stickyPayload).length > 0 ? stickyPayload : undefined,
+        targets: ["x", "threads", "stories"] as const,
+      };
+
       const res = await fetch("/api/generate/social-post", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`, // ← 重要
         },
-        body: JSON.stringify({ memo: memoText, platform: "x", variants: 2 }),
+        body: JSON.stringify(body),
         cache: "no-store",
       });
 
@@ -101,89 +156,41 @@ export default function MemoForm(props: MemoFormProps) {
         }
         throw new Error(msg);
       }
-        
-        const json = await res.json();
-        const posts = Array.isArray(json?.posts) && json.posts.every((s: unknown) => typeof s === "string")
-          ? (json.posts as string[])
+
+      const json = await res.json();
+      // 緩いガードでサーバ返却を受け入れ（不足時は空配列）
+      const x = Array.isArray(json?.x)
+        ? json.x.filter((s: unknown) => typeof s === "string")
+        : Array.isArray(json?.posts)
+          ? json.posts.filter((s: unknown) => typeof s === "string")
           : [];
-        setGen({ loading: false, posts });
-        setSelectedIdx(null);
+      const threads = Array.isArray(json?.threads)
+        ? json.threads.filter((s: unknown) => typeof s === "string")
+        : [];
+      const stories = Array.isArray(json?.stories)
+        ? json.stories.filter((s: unknown) => typeof s === "string")
+        : [];
+      const data: SocialAll = { x, threads, stories, posts: x };
+      setGen({ loading: false, data });
     } catch (e) {
       setGen({
         loading: false,
-        posts: [],
+        data: { x: [], threads: [], stories: [], posts: [] },
         error: e instanceof Error ? e.message : String(e),
       });
     }
   };
 
-  // 生成案をcaptionに反映
-  const adoptToCaption = (text: string, index: number) => {
-    onCaptionChange(text);
-    setSelectedIdx(index);
-    // 必要ならスクロールや通知などを追加
-  };
-
-  const boxClass =
-    "w-full border px-3 py-2 rounded text-black bg-white placeholder:text-gray-400 " +
-    "min-h-32 md:min-h-36 max-h-64 overflow-auto resize-y leading-relaxed";
-
   return (
     <div className="space-y-4 bg-white text-black">
-      <label htmlFor="caption" className="block font-bold mb-1">やったこと学んだことをメモ</label>
-      <textarea
-        id="caption"
-        className={boxClass}
-        value={caption}
-        onChange={(e) => onCaptionChange(e.target.value)}
-        disabled={isSubmitting}
-        placeholder="今日の要点をメモ（複数行OK）"
-      />
-
-      <div>
-        <label htmlFor="why" className="block font-bold mb-1">
-          なぜこの内容をメモしたのか？（→ 背景やきっかけを明確化する）
-        </label>
-        <textarea
-          id="why"
-          className={boxClass}
-          value={answerWhy}
-          onChange={(e) => onWhyChange(e.target.value)}
-          disabled={isSubmitting}
-          placeholder="理由・背景"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="what" className="block font-bold mb-1">
-          何が起きた／どう感じたのか？（→ 起こった出来事や自分の気づき・感情を具体化）
-        </label>
-        <textarea
-          id="what"
-          className={boxClass}
-          value={answerWhat}
-          onChange={(e) => onWhatChange(e.target.value)}
-          disabled={isSubmitting}
-          placeholder="出来事・気づき"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="next" className="block font-bold mb-1">
-          次に何をする／学んだ教訓は？（→ 今後のアクションや得られた示唆を整理）
-        </label>
-        <textarea
-          id="next"
-          className={boxClass}
-          value={answerNext}
-          onChange={(e) => onNextChange(e.target.value)}
-          disabled={isSubmitting}
-          placeholder="次の一手・教訓"
-        />
-      </div>
-
-      {/* ▼ ここが新規追加：バズ整形UI */}
+      {/* ▼ 生成結果表示（媒体別タブ） */}
       <div className="rounded border p-3 space-y-3">
+        {/* Sticky 補助入力 */}
+        <StickyInputsForm
+          values={stickyUI}
+          onChange={(p) => setStickyUI((prev) => ({ ...prev, ...p }))}
+        />
+
         <div className="flex items-center gap-4 justify-center">
 
           <button
@@ -197,63 +204,35 @@ export default function MemoForm(props: MemoFormProps) {
 
         {gen.error && <p className="text-red-600 text-sm">{gen.error}</p>}
 
-        {gen.posts.length > 0 && (
-          <div className="grid gap-3">
-            {gen.posts.map((p, i) => {
-              const isSelected = selectedIdx === i;
-              const cardClass = isSelected
-                ? "rounded border p-3 bg-blue-50 border-blue-500 ring-1 ring-blue-400"
-                : "rounded border p-3 bg-gray-50";
-              return (
-                <div key={i} className={cardClass}>
-                  <div className="flex items-center gap-2 opacity-70 text-xs mb-2">
-                    <span>案 {i + 1}</span>
-                    {isSelected && (
-                      <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-600" />
-                        選択中
-                      </span>
-                    )}
-                  </div>
-                  <pre className="whitespace-pre-wrap leading-relaxed">{p}</pre>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() => adoptToCaption(p, i)}
-                      className={
-                        isSelected
-                          ? "bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm cursor-default"
-                          : "bg-black text-white px-3 py-1 rounded text-sm hover:opacity-80"
-                      }
-                      disabled={isSelected}
-                    >
-                      {isSelected ? "文章に反映済み" : "この文章を選択"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {gen.data ? (
+          <ResultsTabs data={gen.data} onActiveTabChange={setActiveTab} />
+        ) : (
+          <div className="text-sm text-gray-500">まだ生成していません</div>
         )}
       </div>
 
       {/* ▼ 既存：保存/ゲート */}
-      {gate ? (
-        <MemberGateButton
-          onAllow={handleSubmit}
-          labelMember={submitLabel}
-          labelGuest={guestLabel}
-          className="w-full bg-black text-white py-3 rounded hover:opacity-80 transition"
-          disabled={isSubmitting}
-        />
-      ) : (
-        <button
-          onClick={handleSubmit}
-          className="w-full bg-black text-white py-3 rounded hover:opacity-80 transition"
-          disabled={isSubmitting}
-        >
-          {submitLabel}
-        </button>
-      )}
+      {(() => {
+        const allowByTab = !writeOutOnlyFor || (activeTab !== null && writeOutOnlyFor.includes(activeTab));
+        if (!allowByTab) return null;
+        return gate ? (
+          <MemberGateButton
+            onAllow={handleSubmit}
+            labelMember={submitLabel}
+            labelGuest={guestLabel}
+            className="w-full bg-black text-white py-3 rounded hover:opacity-80 transition"
+            disabled={isSubmitting}
+          />
+        ) : (
+          <button
+            onClick={handleSubmit}
+            className="w-full bg-black text-white py-3 rounded hover:opacity-80 transition"
+            disabled={isSubmitting}
+          >
+            {submitLabel}
+          </button>
+        );
+      })()}
     </div>
   );
 }
