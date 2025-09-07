@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
+import { useAuthMe } from '@/app/hooks/useAuthMe';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
 import MemberGateButton from '@/app/_components/MemberGateButton';
 import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
 import BlurredTextPreview from '@/app/_components/BlurredTextPreview';
 import TrialNotice from '@/app/_components/TrialNotice';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faXTwitter, faThreads } from '@fortawesome/free-brands-svg-icons';
 import { authedFetch } from '@/lib/authedFetch';
 
 type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
@@ -49,9 +52,16 @@ export default function PostDetailPage() {
   const isTrial = searchParams.has('trial'); // 体験モード
 
   const { token, isLoading: tokenLoading } = useSupabaseSession();
+  const { data: me, loading: meLoading } = useAuthMe();
 
   // 体験 or 非ログイン はゲストUI（ぼかし等）扱い
   const isGuest = isTrial || !token;
+  // シェア許可の厳密判定：
+  // - 体験モードでない
+  // - me のロード完了
+  // - me.isGuest が false（会員）
+  // これにより、判定不能（me 未取得/エラー）時はシェア不可に倒す
+  const canShare = !isTrial && !meLoading && me?.isGuest === false;
 
   const userEditedRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -74,7 +84,23 @@ export default function PostDetailPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
 
-  // シェアUIは詳細ページから撤去（/compose/input 側に集約）
+  // ★ shareDisabled は処理状態のみで制御（会員判定は canShare ブランチで分岐）
+  const shareDisabled = isProcessing || isUploading;
+
+  // 共有URL
+  const xShareUrl = useMemo(() => {
+    const t = (text ?? '').slice(0, 280);
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${t}\n\n${url}` : t;
+    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`;
+  }, [text]);
+  const threadsShareUrl = useMemo(() => {
+    const t = (text ?? '').slice(0, 500);
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${t}\n\n${url}` : t;
+    const params = new URLSearchParams({ text: combined });
+    return `https://www.threads.net/intent/post?${params.toString()}`;
+  }, [text]);
 
   // 非トライアル時のみ：未ログインは /login へ
   useEffect(() => {
@@ -251,7 +277,57 @@ export default function PostDetailPage() {
           />
         )}
 
-        {/* ▼ シェア導線は /compose/input 側の結果タブに集約。詳細ページでは撤去済み。 */}
+        {/* ▼ シェア（会員のみ有効。その他はサインアップ誘導） */}
+        {!canShare ? (
+          <>
+            <button
+              onClick={() => router.push('/signup')}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white rounded opacity-70 cursor-not-allowed"
+              aria-disabled
+            >
+              Xでシェア
+            </button>
+            <button
+              onClick={() => router.push('/signup')}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded opacity-70 cursor-not-allowed"
+              aria-disabled
+            >
+              Threadsでシェア
+            </button>
+          </>
+        ) : (
+          <>
+            <a
+              href={xShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (shareDisabled) { e.preventDefault(); }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition ${
+                shareDisabled ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <FontAwesomeIcon icon={faXTwitter} />
+              Xでシェア
+            </a>
+
+            <a
+              href={threadsShareUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (shareDisabled) { e.preventDefault(); }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded hover:opacity-80 transition ${
+                shareDisabled ? 'pointer-events-none opacity-50' : ''
+              }`}
+            >
+              <FontAwesomeIcon icon={faThreads} />
+              Threadsでシェア
+            </a>
+          </>
+        )}
       </div>
 
       <div className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen bottom-0">

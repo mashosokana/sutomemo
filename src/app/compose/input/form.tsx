@@ -11,7 +11,7 @@ type Props = { userId: string; token: string | null };
 
 const ENV_SANDBOX_ID = Number(process.env.NEXT_PUBLIC_GUEST_SANDBOX_POST_ID ?? "0");
 
-function saveGuestDraft(d: { caption: string }) {
+function saveGuestDraft(d: { caption: string; answerWhy: string; answerWhat: string; answerNext: string }) {
   try { sessionStorage.setItem("guestDraft", JSON.stringify(d)); } catch {}
 }
 
@@ -71,6 +71,9 @@ async function resolveGuestPostId(): Promise<number | null> {
 
 export default function ComposeInputForm({ token }: Props) {
   const [caption, setCaption] = useState("");
+  const [answerWhy, setAnswerWhy] = useState("");
+  const [answerWhat, setAnswerWhat] = useState("");
+  const [answerNext, setAnswerNext] = useState("");
   const router = useRouter();
   const { data: me } = useAuthMe();
   const isGuest = me?.isGuest ?? false;
@@ -78,7 +81,7 @@ export default function ComposeInputForm({ token }: Props) {
   const handleSubmit = async (): Promise<void> => {
     // ★ ゲスト：DB保存せず、既存の投稿IDに trial 付きで遷移
     if (isGuest) {
-      saveGuestDraft({ caption });
+      saveGuestDraft({ caption, answerWhy, answerWhat, answerNext });
     
       const pid = await resolveGuestPostId(); 
       const targetId = pid ?? 0;              
@@ -91,7 +94,7 @@ export default function ComposeInputForm({ token }: Props) {
       alert("認証トークンが見つかりません。ログインし直して下さい。");
       return;
     }
-    const postData = { caption };
+    const postData = { caption, memo: { answerWhy, answerWhat, answerNext } };
 
     try {
       const res = await fetch("/api/posts", {
@@ -116,13 +119,19 @@ export default function ComposeInputForm({ token }: Props) {
 
   return (
     <main className="max-w-xl mx-auto p-6 bg-white text-black min-h-screen">
+      <h1 className="text-2xl font-bold mb-6">メモする</h1>
       <MemoForm
         caption={caption}
+        answerWhy={answerWhy}
+        answerWhat={answerWhat}
+        answerNext={answerNext}
         onCaptionChange={setCaption}
+        onWhyChange={setAnswerWhy}
+        onWhatChange={setAnswerWhat}
+        onNextChange={setAnswerNext}
         onSubmit={handleSubmit}
         submitLabel="文章を書き出す"
-        gate={false}
-        writeOutOnlyFor={["stories"]}
+        gate={false}  
       />
     </main>
   );
