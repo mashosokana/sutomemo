@@ -83,6 +83,7 @@ export default function PostDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
+  const [isMobileEditorOpen, setMobileEditorOpen] = useState(false);
 
   // ★ shareDisabled は処理状態のみで制御（会員判定は canShare ブランチで分岐）
   const shareDisabled = isProcessing || isUploading;
@@ -160,6 +161,16 @@ export default function PostDetailPage() {
     if (!canvasRef.current) return;
     void drawOnCanvas(canvasRef.current);
   }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
+
+  useEffect(() => {
+    if (!isMobileEditorOpen) return;
+    const { style } = document.body;
+    const originalOverflow = style.overflow;
+    style.overflow = 'hidden';
+    return () => {
+      style.overflow = originalOverflow;
+    };
+  }, [isMobileEditorOpen]);
 
   // 表示許可：トライアルは常にOK / 通常はログイン時のみ
   const canUsePage = isTrial || (!tokenLoading && !!token);
@@ -267,14 +278,39 @@ export default function PostDetailPage() {
             />
           </div>
         ) : (
-          <textarea
-            value={text}
-            onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
-            rows={10}
-            className="w-full border p-2 rounded min-h-[180px] max-h-[60vh] overflow-auto resize-y"
-            disabled={isProcessing || isUploading}
-            placeholder="作成時の caption がここに入ります。自由に編集できます。"
-          />
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
+              rows={10}
+              className="hidden sm:block w-full border p-2 rounded min-h-[180px] max-h-[60vh] overflow-auto resize-y"
+              disabled={isProcessing || isUploading}
+              placeholder="作成時の caption がここに入ります。自由に編集できます。"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isProcessing || isUploading) return;
+                setMobileEditorOpen(true);
+              }}
+              className="w-full sm:hidden border rounded p-3 flex flex-col gap-3 text-left bg-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:bg-gray-50 disabled:opacity-50"
+              disabled={isProcessing || isUploading}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">スマホ編集</h3>
+                <span className="text-xs text-gray-500">
+                  {(text ?? '').length}文字
+                </span>
+              </div>
+              <p className="text-sm whitespace-pre-wrap break-words min-h-[96px] text-gray-800">
+                {(text ?? '').trim() !== ''
+                  ? text
+                  : '作成時の caption がここに表示されます。'}
+              </p>
+              <span className="text-xs text-blue-600 self-end">タップして編集</span>
+            </button>
+          </>
         )}
 
         {/* ▼ シェア（会員のみ有効。その他はサインアップ誘導） */}
@@ -383,6 +419,39 @@ export default function PostDetailPage() {
           />
         </div>
       </div>
+
+      {isMobileEditorOpen && (
+        <div className="fixed inset-0 z-[120] bg-white flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <span className="text-sm font-semibold">テキスト編集</span>
+            <button
+              type="button"
+              onClick={() => setMobileEditorOpen(false)}
+              className="text-sm text-gray-500"
+            >
+              キャンセル
+            </button>
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
+            className="flex-1 p-4 text-sm leading-relaxed focus:outline-none resize-none"
+            placeholder="作成時の caption がここに入ります。自由に編集できます。"
+            disabled={isProcessing || isUploading}
+            autoFocus
+          />
+          <div className="border-t px-4 py-3 flex items-center justify-between text-xs text-gray-500">
+            <span>{(text ?? '').length}文字</span>
+            <button
+              type="button"
+              onClick={() => setMobileEditorOpen(false)}
+              className="px-4 py-2 bg-black text-white rounded text-sm"
+            >
+              完了
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

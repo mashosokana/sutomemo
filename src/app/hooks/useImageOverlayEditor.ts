@@ -7,6 +7,9 @@ import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 type Point = { x: number; y: number };
 type TextBoxSize = { width: number; height: number };
 type ApiImage = { signedUrl?: string | null };
+type ShareCapableNavigator = Navigator & {
+  canShare?: (data: { files?: File[] }) => boolean;
+};
 
 type UseImageOverlayEditorArgs = { postId: number };
 type UseImageOverlayEditorReturn = {
@@ -461,8 +464,34 @@ function bindCanvasDrag(e: React.PointerEvent<HTMLCanvasElement>) {
   /* ダウンロード */
   const downloadCanvas = useCallback((canvas: HTMLCanvasElement | null, filename: string) => {
     if (!canvas) return;
-    canvas.toBlob((blob) => {
+    canvas.toBlob(async (blob) => {
       if (!blob) return;
+
+      const nav = typeof navigator !== 'undefined'
+        ? (navigator as ShareCapableNavigator)
+        : null;
+
+      // iOS Safari ではダウンロードリンクがファイルアプリ経由になるため
+      // Web Share API を優先してシェアシートから「写真に保存」を選べるようにする。
+      const triedShare = await (async (): Promise<boolean> => {
+        if (!nav || typeof nav.share !== 'function') return false;
+        if (typeof File === 'undefined') return false;
+        try {
+          const file = new File([blob], filename, { type: blob.type || 'image/png' });
+          if (typeof nav.canShare === 'function' && !nav.canShare({ files: [file] })) return false;
+          await nav.share({ files: [file], title: filename, text: '画像を保存してください。' });
+          return true;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            // ユーザーがシェアシートを閉じた場合はフォールバック不要
+            return true;
+          }
+          return false;
+        }
+      })();
+
+      if (triedShare) return;
+
       const a = document.createElement('a');
       const url = URL.createObjectURL(blob);
       a.href = url;
