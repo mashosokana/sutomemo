@@ -21,24 +21,12 @@ type PostType = {
   }>;
 };
 
-type IdeaType = {
-  id: number;
-  title: string;
-  description: string;
-  priority: number;
-  createdAt: string;
-};
-
 export default function DashboardPage() {
   const { session, token, isLoading } = useSupabaseSession();
   const router = useRouter();
 
   const [totalPosts, setTotalPosts] = useState(0);
-  const [publishedPosts, setPublishedPosts] = useState(0);
-  const [draftPosts, setDraftPosts] = useState(0);
-  const [avgEngagementRate, setAvgEngagementRate] = useState("0.00");
   const [recentPosts, setRecentPosts] = useState<PostType[]>([]);
-  const [ideas, setIdeas] = useState<IdeaType[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -62,9 +50,6 @@ export default function DashboardPage() {
 
         if (statsRes.ok) {
           setTotalPosts(statsData.totalPosts || 0);
-          setPublishedPosts(statsData.publishedPosts || 0);
-          setDraftPosts(statsData.draftPosts || 0);
-          setAvgEngagementRate(statsData.avgEngagementRate || "0.00");
         }
 
         // 最近の投稿3件を取得
@@ -76,17 +61,6 @@ export default function DashboardPage() {
 
         if (postsRes.ok) {
           setRecentPosts(postsData.posts || []);
-        }
-
-        // AI提案を取得
-        const ideasRes = await fetch("/api/dashboard/ideas?limit=3", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        const ideasData = await ideasRes.json();
-
-        if (ideasRes.ok) {
-          setIdeas(ideasData.ideas || []);
         }
       } catch (error) {
         console.error("Dashboard data fetch error:", error);
@@ -125,36 +99,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-
-        {/* 公開済み投稿 */}
-        <div className="bg-white rounded-lg p-4 border border-gray-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">公開済み</p>
-              <p className="text-2xl font-bold text-gray-900">{publishedPosts}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 下書き投稿 */}
-        <div className="bg-white rounded-lg p-4 border border-gray-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">下書き</p>
-              <p className="text-2xl font-bold text-gray-900">{draftPosts}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 平均反応率 */}
-        <div className="bg-white rounded-lg p-4 border border-gray-300">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">平均反応率（30日間）</p>
-              <p className="text-2xl font-bold text-gray-900">{avgEngagementRate}%</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* 最近の投稿 */}
@@ -179,15 +123,6 @@ export default function DashboardPage() {
               >
                 <p className="text-sm text-gray-900 line-clamp-2 mb-2">{post.caption}</p>
                 <div className="flex items-center gap-3 text-xs text-gray-500">
-                  <span
-                    className={`px-2 py-1 rounded ${
-                      post.status === "published"
-                        ? "bg-gray-200 text-gray-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {post.status === "published" ? "公開済み" : "下書き"}
-                  </span>
                   <span>{new Date(post.createdAt).toLocaleDateString("ja-JP")}</span>
                 </div>
               </Link>
@@ -206,56 +141,19 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* AI投稿提案 */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">AI投稿提案</h2>
-          <Link
-            href="/ideas"
-            className="text-sm text-gray-600 hover:text-gray-900 font-medium"
-          >
-            すべて見る →
-          </Link>
-        </div>
-
-        {ideas.length > 0 ? (
-          <div className="space-y-3">
-            {ideas.map((idea) => (
-              <div
-                key={idea.id}
-                className="p-4 rounded-lg border border-gray-300 bg-gray-50"
-              >
-                <div className="flex items-start gap-2 mb-2">
-                  <span className="px-2 py-0.5 text-xs font-bold text-gray-700 bg-gray-200 rounded">
-                    優先度 {idea.priority}
-                  </span>
-                </div>
-                <h3 className="font-bold text-gray-900 mb-1">{idea.title}</h3>
-                <p className="text-sm text-gray-600 line-clamp-2">{idea.description}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500 border border-gray-300 rounded-lg">
-            <p>AI提案はまだありません</p>
-            <p className="text-sm mt-2">投稿を作成すると、AIが次の投稿案を提案します</p>
-          </div>
-        )}
-      </div>
-
       {/* クイックアクション */}
       <div className="mb-6 space-y-3">
         <Link
-          href="/ai-posts"
+          href="/ideas"
           className="block w-full bg-black text-white text-lg py-3 rounded-md font-bold text-center hover:bg-gray-800"
         >
-          ✨ AI投稿文を生成
+          次の投稿ネタを探す
         </Link>
         <Link
           href="/compose/input"
           className="block w-full bg-gray-200 text-gray-900 text-lg py-3 rounded-md font-bold text-center hover:bg-gray-300"
         >
-          +新規作成
+          新規作成
         </Link>
       </div>
     </main>

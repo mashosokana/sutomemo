@@ -43,7 +43,6 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingPosts, setLoadingPosts] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "published">("all");
 
   useEffect(() => {
     if (!isLoading && !session) {
@@ -166,11 +165,6 @@ export default function DashboardPage() {
   const filteredPosts = useMemo(() => {
     let filtered = posts;
 
-    // ステータスフィルタ
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((post) => post.status === statusFilter);
-    }
-
     // 検索クエリフィルタ
     if (normalizedQuery) {
       filtered = filtered.filter((post) => {
@@ -190,7 +184,7 @@ export default function DashboardPage() {
     }
 
     return filtered;
-  }, [posts, normalizedQuery, statusFilter]);
+  }, [posts, normalizedQuery]);
 
   if (!isLoading && !session) {
     return <div className="p-4">ログインページへ移動します...</div>;
@@ -214,46 +208,12 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ステータスフィルタ */}
-      <div className="mb-4 flex gap-2">
-        <button
-          onClick={() => setStatusFilter("all")}
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            statusFilter === "all"
-              ? "bg-black text-white"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
-        >
-          全て
-        </button>
-        <button
-          onClick={() => setStatusFilter("draft")}
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            statusFilter === "draft"
-              ? "bg-black text-white"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
-        >
-          下書き
-        </button>
-        <button
-          onClick={() => setStatusFilter("published")}
-          className={`px-4 py-2 rounded-md text-sm font-medium ${
-            statusFilter === "published"
-              ? "bg-black text-white"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
-        >
-          公開済み
-        </button>
-      </div>
-
       <div className="mb-6">
         <Link
           href="/compose/input"
           className="block w-full bg-black text-white text-lg py-3 rounded-md font-bold text-center hover:bg-gray-800"
         >
-          +新規作成
+          新規作成
         </Link>
       </div>
 

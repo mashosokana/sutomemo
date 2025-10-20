@@ -1,8 +1,8 @@
 // src/app/api/ideas/generate/route.ts
-import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 import OpenAI from "openai";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,31 +106,21 @@ JSON形式で以下のように返してください：
       throw new Error("AIが提案を生成できませんでした");
     }
 
-    // データベースに保存
-    const savedIdeas = await Promise.all(
-      generatedIdeas.map(async (idea: any) => {
-        return await prisma.idea.create({
-          data: {
-            userId: user.id,
-            title: idea.title,
-            description: idea.description,
-            suggestedHashtags: idea.suggestedHashtags || [],
-            priority: idea.priority || 3,
-            status: "pending",
-          },
-        });
-      })
-    );
-
+    // データベース保存なし - セッションのみで管理
     return jsonNoStore(
       {
-        ideas: savedIdeas.map((idea) => ({
-          id: idea.id,
+        ideas: generatedIdeas.map((idea: {
+          title: string;
+          description: string;
+          priority?: number;
+          suggestedHashtags?: string[]
+        }, index: number) => ({
+          id: Date.now() + index, // 一時的なID
           title: idea.title,
           description: idea.description,
-          priority: idea.priority,
-          suggestedHashtags: idea.suggestedHashtags,
-          createdAt: idea.createdAt.toISOString(),
+          priority: idea.priority || 3,
+          suggestedHashtags: idea.suggestedHashtags || [],
+          createdAt: new Date().toISOString(),
         })),
       },
       { status: 200 }

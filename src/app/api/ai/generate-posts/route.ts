@@ -140,7 +140,11 @@ JSON形式で以下のように返してください：
 
     return jsonNoStore(
       {
-        posts: generatedPosts.map((post: any) => ({
+        posts: generatedPosts.map((post: {
+          caption: string;
+          hashtags?: string[];
+          pattern?: string;
+        }) => ({
           caption: post.caption,
           hashtags: post.hashtags || [],
           pattern: post.pattern || "その他",

@@ -184,6 +184,9 @@ export default function MemoForm(props: MemoFormProps) {
 
       {/* ▼ ここが新規追加：バズ整形UI */}
       <div className="rounded border p-3 space-y-3">
+        <p className="text-sm text-gray-600 text-center">
+          入力したメモをX/Threads用の投稿文に最適化します
+        </p>
         <div className="flex items-center gap-4 justify-center">
 
           <button
@@ -191,7 +194,7 @@ export default function MemoForm(props: MemoFormProps) {
             disabled={gen.loading}
             className="min-w-[300px] bg-black text-white px-4 py-2 rounded hover:opacity-80 transition"
           >
-            {gen.loading ? "生成中…" : "SNS専用メモを生成する"}
+            {gen.loading ? "生成中…" : "このメモをバズる投稿文にする"}
           </button>
         </div>
 
