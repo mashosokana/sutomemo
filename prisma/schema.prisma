@@ -40,6 +40,7 @@ model Post {
   updatedAt          DateTime   @updatedAt
   images             Image[]
   memo               Memo?
+  metrics            Metrics?
   thumbnailImageKey  String?
   user               User       @relation(fields: [userId], references: [id])
 }
@@ -64,3 +65,20 @@ model Image {
   post        Post     @relation(fields: [postId], references: [id])
 }
 
+// メトリクスモデル（いいね数・コメント数・反応率）
+model Metrics {
+  id             Int      @id @default(autoincrement())
+  postId         Int      @unique
+  likesCount     Int      @default(0)
+  commentsCount  Int      @default(0)
+  savesCount     Int      @default(0)
+  sharesCount    Int      @default(0)
+  impressions    Int      @default(0)
+  reach          Int      @default(0)
+  engagementRate Float    @default(0)
+  source         String   @default("manual") // manual or api
+  fetchedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}

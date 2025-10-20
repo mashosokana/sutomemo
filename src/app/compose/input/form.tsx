@@ -7,7 +7,7 @@ import MemoForm from "@/app/_components/MemoForm";
 import { useAuthMe } from "@/app/hooks/useAuthMe";
 import { supabase } from "@/lib/supabase";
 
-type Props = { userId: string; token: string | null };
+type Props = { userId: string; token: string | null; initialCaption?: string };
 
 const ENV_SANDBOX_ID = Number(process.env.NEXT_PUBLIC_GUEST_SANDBOX_POST_ID ?? "0");
 
@@ -69,8 +69,8 @@ async function resolveGuestPostId(): Promise<number | null> {
   }
 }
 
-export default function ComposeInputForm({ token }: Props) {
-  const [caption, setCaption] = useState("");
+export default function ComposeInputForm({ token, initialCaption }: Props) {
+  const [caption, setCaption] = useState(initialCaption || "");
   const [answerWhy, setAnswerWhy] = useState("");
   const [answerWhat, setAnswerWhat] = useState("");
   const [answerNext, setAnswerNext] = useState("");
