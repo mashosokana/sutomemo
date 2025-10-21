@@ -5,8 +5,9 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
-  const guestEmail = "guest@sutomemo.app";
-  const plainPassword = "guestpass";
+  // .envから環境変数を読み取る
+  const guestEmail = process.env.NEXT_PUBLIC_GUEST_EMAIL || "guest@sutomemo.app";
+  const plainPassword = process.env.NEXT_PUBLIC_GUEST_PASSWORD || "guestpass";
 
   // すでに存在していたらスキップ
   const existing = await prisma.user.findUnique({ where: { email: guestEmail } });

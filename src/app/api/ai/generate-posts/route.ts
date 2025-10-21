@@ -2,14 +2,20 @@
 import { prisma } from "@/lib/prisma";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
-import OpenAI from "openai";
+import { openai, retryWithBackoff, validateOpenAIResponse, parseAndValidateJSON } from "@/lib/openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+type GeneratedPost = {
+  caption: string;
+  hashtags?: string[];
+  pattern?: string;
+};
+
+type AIGeneratePostsResponse = {
+  posts: GeneratedPost[];
+};
 
 /**
  * AI投稿文を生成（3パターン）
@@ -86,13 +92,14 @@ export async function POST(req: Request) {
       }
     }
 
-    // OpenAI APIで投稿文を生成
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `あなたはSNS投稿の文章を書くプロのライターです。
+    // OpenAI APIで投稿文を生成（リトライ機能付き）
+    const completion = await retryWithBackoff(async () => {
+      return await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `あなたはSNS投稿の文章を書くプロのライターです。
 ユーザーの過去の投稿履歴を分析し、そのまま使える投稿文を3パターン生成してください。
 
 【重要な指針】
@@ -116,22 +123,31 @@ JSON形式で以下のように返してください：
     }
   ]
 }`,
-        },
-        {
-          role: "user",
-          content: `以下は私の最近の投稿履歴です。これを分析して、今日投稿できる文章を3パターン生成してください。${bestPractices}\n\n${postsSummary}`,
-        },
-      ],
-      temperature: 0.8,
-      response_format: { type: "json_object" },
+          },
+          {
+            role: "user",
+            content: `以下は私の最近の投稿履歴です。これを分析して、今日投稿できる文章を3パターン生成してください。${bestPractices}\n\n${postsSummary}`,
+          },
+        ],
+        temperature: 0.8,
+        response_format: { type: "json_object" },
+      });
     });
 
-    const responseText = completion.choices[0]?.message?.content;
-    if (!responseText) {
-      throw new Error("AIからの応答がありません");
-    }
+    const responseText = validateOpenAIResponse(completion.choices[0]?.message?.content);
 
-    const aiResponse = JSON.parse(responseText);
+    const aiResponse = parseAndValidateJSON<AIGeneratePostsResponse>(
+      responseText,
+      (data): data is AIGeneratePostsResponse => {
+        return (
+          typeof data === 'object' &&
+          data !== null &&
+          'posts' in data &&
+          Array.isArray((data as AIGeneratePostsResponse).posts)
+        );
+      }
+    );
+
     const generatedPosts = aiResponse.posts || [];
 
     if (generatedPosts.length === 0) {

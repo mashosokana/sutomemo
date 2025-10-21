@@ -1,15 +1,22 @@
 // src/app/api/ideas/generate/route.ts
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
-import OpenAI from "openai";
+import { openai, retryWithBackoff, validateOpenAIResponse, parseAndValidateJSON } from "@/lib/openai";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+type GeneratedIdea = {
+  title: string;
+  description: string;
+  priority?: number;
+  suggestedHashtags?: string[];
+};
+
+type AIGenerateIdeasResponse = {
+  ideas: GeneratedIdea[];
+};
 
 /**
  * AI投稿提案を生成
@@ -58,13 +65,14 @@ export async function POST(req: Request) {
       })
       .join("\n\n");
 
-    // OpenAI APIで提案を生成
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `あなたはSNS投稿のアイデアを提案するアシスタントです。
+    // OpenAI APIで提案を生成（リトライ機能付き）
+    const completion = await retryWithBackoff(async () => {
+      return await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `あなたはSNS投稿のアイデアを提案するアシスタントです。
 ユーザーの過去の投稿履歴を分析し、次の投稿アイデアを3つ提案してください。
 
 各提案には以下を含めてください：
@@ -84,22 +92,31 @@ JSON形式で以下のように返してください：
     }
   ]
 }`,
-        },
-        {
-          role: "user",
-          content: `以下は私の最近の投稿履歴です。これを分析して、次の投稿アイデアを3つ提案してください。\n\n${postsSummary}`,
-        },
-      ],
-      temperature: 0.8,
-      response_format: { type: "json_object" },
+          },
+          {
+            role: "user",
+            content: `以下は私の最近の投稿履歴です。これを分析して、次の投稿アイデアを3つ提案してください。\n\n${postsSummary}`,
+          },
+        ],
+        temperature: 0.8,
+        response_format: { type: "json_object" },
+      });
     });
 
-    const responseText = completion.choices[0]?.message?.content;
-    if (!responseText) {
-      throw new Error("AIからの応答がありません");
-    }
+    const responseText = validateOpenAIResponse(completion.choices[0]?.message?.content);
 
-    const aiResponse = JSON.parse(responseText);
+    const aiResponse = parseAndValidateJSON<AIGenerateIdeasResponse>(
+      responseText,
+      (data): data is AIGenerateIdeasResponse => {
+        return (
+          typeof data === 'object' &&
+          data !== null &&
+          'ideas' in data &&
+          Array.isArray((data as AIGenerateIdeasResponse).ideas)
+        );
+      }
+    );
+
     const generatedIdeas = aiResponse.ideas || [];
 
     if (generatedIdeas.length === 0) {
