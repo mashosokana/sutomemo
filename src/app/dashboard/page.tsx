@@ -155,6 +155,12 @@ export default function DashboardPage() {
         >
           新規作成
         </Link>
+        <Link
+          href="/reels/new"
+          className="block w-full bg-white border border-gray-300 text-gray-900 text-lg py-3 rounded-md font-bold text-center hover:bg-gray-100"
+        >
+          かんたんリール
+        </Link>
       </div>
     </main>
   );

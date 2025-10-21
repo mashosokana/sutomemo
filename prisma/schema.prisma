@@ -82,3 +82,32 @@ model Metrics {
   updatedAt      DateTime @updatedAt
   post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
+
+// リール動画の軽量ログモデル（15秒固定、AI生成）
+model ReelsLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  postLocalId   String   // 端末内の一意キー（生成時に発行）
+  industry      String   // 業種（記述式）
+  durationSecs  Int      @default(15)  // 15秒固定
+  metrics       Json     @default("{}")  // { "views": int, "saves": int, "dms": int }
+  postedAt      DateTime @default(now()) @db.Date
+  createdAt     DateTime @default(now())
+
+  @@map("reels_logs")
+}
+
+model ReelsOutput {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  postLocalId String   @unique
+  caption     String
+  hook        String
+  problem     String
+  evidence    String
+  action      String
+  hashtags    Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  @@map("reels_outputs")
+}

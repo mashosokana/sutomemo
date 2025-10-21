@@ -95,10 +95,12 @@ export default function Home() {
           </p>
         </section>
 
-        {/* ボタン */}
-        <div className="space-y-3">
+        {/* 既存ボタン（お試しログイン） */}
+        <div className="space-y-3 mt-4">
           <Link href="/signup">
-            <button className="w-full bg-black text-white py-2 rounded mb-2 font-bold">ユーザー登録</button>
+            <button className="w-full bg-black text-white py-2 rounded font-bold">
+              ユーザー登録
+            </button>
           </Link>
           <button
             onClick={handleGuestLogin}
@@ -173,7 +175,9 @@ export default function Home() {
 
         <div className="space-y-3 mt-4">
           <Link href="/signup">
-            <button className="w-full bg-black text-white py-2 rounded mb-2 font-bold">ユーザー登録</button>
+            <button className="w-full bg-gray-800 text-white py-2 rounded font-bold">
+              ユーザー登録
+            </button>
           </Link>
           <button
             onClick={handleGuestLogin}

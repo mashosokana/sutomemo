@@ -3,10 +3,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Image from 'next/image';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
 import ImageFileInput from '@/app/_components/ImageFileInput';
-import { useAuthMe } from '@/app/hooks/useAuthMe';             
+import { useAuthMe } from '@/app/hooks/useAuthMe';
 import MemberGateButton from '@/app/_components/MemberGateButton';
 import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
 
@@ -93,15 +94,16 @@ export default function EditImagePage() {
       {/* ローカル選択はゲストもOK（Supabase保存は会員のみ） */}
       {previewUrls.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           {previewUrls.map((src, i) => (
-            <img
-              key={src}
-              src={src}
-              alt={`選択画像 ${i + 1}`}
-              className="border rounded max-w-[140px] h-auto"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
+            <div key={src} className="relative w-[140px] h-[140px]">
+              <Image
+                src={src}
+                alt={`選択画像 ${i + 1}`}
+                fill
+                className="border rounded object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            </div>
           ))}
         </div>
       )}

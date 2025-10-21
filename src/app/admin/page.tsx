@@ -1,7 +1,7 @@
 // src/app/admin/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -112,7 +112,7 @@ export default function AdminHome() {
     }
   };
 
-  const fetchGuestPosts = async () => {
+  const fetchGuestPosts = useCallback(async () => {
     setFetching(true);
     setMsg("");
     try {
@@ -136,7 +136,7 @@ export default function AdminHome() {
     } finally {
       setFetching(false);
     }
-  };
+  }, []);
 
   const deleteSelected = async () => {
     if (selectedIds.size === 0) {
@@ -173,7 +173,7 @@ export default function AdminHome() {
     }
   };
 
-  useEffect(() => { void fetchGuestPosts(); }, []);
+  useEffect(() => { void fetchGuestPosts(); }, [fetchGuestPosts]);
 
   return (
     <main className="p-6 space-y-6">
