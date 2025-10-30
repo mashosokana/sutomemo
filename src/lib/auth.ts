@@ -1,9 +1,14 @@
 // src/lib/auth.ts
 import { supabaseAdmin } from "./supabaseAdmin";
 import { prisma } from "./prisma";
-import { Role } from "@prisma/client"; 
+import { PlanTier, Role } from "@prisma/client"; 
 
-export type AuthUser = { id: string; email: string | null; role: Role };
+export type AuthUser = {
+  id: string;
+  email: string | null;
+  role: Role;
+  planTier: PlanTier;
+};
 
 export type VerifyUserResult =
   | { user: AuthUser; error: null; status: 200 }
@@ -47,20 +52,28 @@ export async function verifyUser(req: Request): Promise<VerifyUserResult> {
     ? Role.ADMIN
     : Role.USER;
 
+  const metadataPlan = parsePlanTier(supaUser.user_metadata?.planTier);
   const userInDb = await prisma.user.upsert({
     where: { email },
     create: {
       id: supaUser.id,
       email,
       role: desiredRole,
+      planTier: metadataPlan ?? PlanTier.FREE,
     },
     update: {
       role: desiredRole,
+      ...(metadataPlan ? { planTier: metadataPlan } : {}),
     },
   });
 
   return {
-    user: { id: userInDb.id, email: userInDb.email, role: userInDb.role },
+    user: {
+      id: userInDb.id,
+      email: userInDb.email,
+      role: userInDb.role,
+      planTier: userInDb.planTier,
+    },
     error: null,
     status: 200,
   };
@@ -89,5 +102,21 @@ export function assertNotGuestOrThrow(user: AuthUser) {
 export function assertAdminOrThrow(user: AuthUser) {
   if (!isAdmin(user)) {
     throw new Response("Forbidden (admin only)", { status: 403 });
+  }
+}
+
+function parsePlanTier(value: unknown): PlanTier | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toUpperCase();
+  return v in PlanTier ? (PlanTier[v as keyof typeof PlanTier] as PlanTier) : null;
+}
+
+export function isPaidPlan(user: AuthUser) {
+  return user.planTier === PlanTier.PRO || user.planTier === PlanTier.ENTERPRISE;
+}
+
+export function assertPaidPlanOrThrow(user: AuthUser) {
+  if (!isPaidPlan(user)) {
+    throw new Response("Forbidden (paid plan required)", { status: 403 });
   }
 }

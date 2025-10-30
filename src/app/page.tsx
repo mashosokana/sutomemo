@@ -34,6 +34,15 @@ export default function Home() {
           alert(`セッション同期失敗: ${error.message}`);
           return;
         }
+
+        // ゲストセッションIDをsessionStorageに保存
+        if (body.guestSessionId) {
+          try {
+            sessionStorage.setItem('guestSessionId', body.guestSessionId);
+          } catch (e) {
+            console.warn('Failed to save guestSessionId to sessionStorage:', e);
+          }
+        }
       } else {
         alert('ログイン失敗: トークンが取得できませんでした');
         return;

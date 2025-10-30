@@ -1,6 +1,7 @@
 // prisma/schema.prisma
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin-arm64"]
 }
 
 datasource db {
@@ -21,11 +22,18 @@ enum PostStatus {
   deleted
 }
 
+enum PlanTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
 model User {
   id        String   @id @default(uuid()) @db.Uuid
   email     String   @unique
   password  String?
   role      Role     @default(USER)
+  planTier  PlanTier @default(FREE)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   posts     Post[]
@@ -36,6 +44,7 @@ model Post {
   userId             String     @db.Uuid
   caption            String
   status             PostStatus @default(draft)
+  guestSessionId     String?    // ゲストユーザーのセッションID（ゲスト投稿の分離用）
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   images             Image[]
@@ -43,6 +52,8 @@ model Post {
   metrics            Metrics?
   thumbnailImageKey  String?
   user               User       @relation(fields: [userId], references: [id])
+
+  @@index([guestSessionId])
 }
 
 model Memo {

@@ -12,23 +12,11 @@ const SIGNED_URL_TTL = 60 * 60;
 
 const nonEmpty = (v?: string | null) => (v && v.trim() !== "" ? v : undefined);
 
-function isGuestEmail(email?: string | null): boolean {
-  const a = (email ?? "").trim().toLowerCase();
-  const b = (process.env.GUEST_USER_EMAIL ?? "").trim().toLowerCase();
-  return a !== "" && a === b;
-}
-
-
 export async function POST(req: Request) {
   try {
 
     const { user, status, error } = await verifyUser(req);
     if (!user) return jsonNoStore({ error }, { status });
-
-
-    if (isGuestEmail(user.email)) {
-      return jsonNoStore({ error: "ゲストユーザーは新規作成できません。会員登録すると投稿できます。" }, { status: 403 });
-    }
 
     const body = await req.json().catch(() => ({} as unknown));
     const caption = typeof (body as Record<string, unknown>)?.caption === "string"
@@ -39,6 +27,12 @@ export async function POST(req: Request) {
       return jsonNoStore({ error: "captionは必須です" }, { status: 400 });
     }
 
+    // ゲストセッションIDの取得（ヘッダーまたはボディから）
+    const guestSessionId =
+      req.headers.get("X-Guest-Session-Id") ||
+      (typeof (body as Record<string, unknown>)?.guestSessionId === "string"
+        ? (body as Record<string, unknown>).guestSessionId as string
+        : null);
 
     const memoRaw = (body as Record<string, unknown>)?.memo as
       | { answerWhy?: unknown; answerWhat?: unknown; answerNext?: unknown }
@@ -57,6 +51,7 @@ export async function POST(req: Request) {
       data: {
         userId: user.id,
         caption,
+        guestSessionId, // ゲストの場合のみ値が入る
         ...(memoData && (memoData.answerWhy || memoData.answerWhat || memoData.answerNext)
           ? { memo: { create: memoData } }
           : {}),
@@ -77,9 +72,16 @@ export async function GET(req: Request) {
     const { user, status, error } = await verifyUser(req);
     if (!user) return jsonNoStore({ error }, { status });
 
+    // ゲストセッションIDの取得
+    const guestSessionId = req.headers.get("X-Guest-Session-Id");
+
+    // ゲストユーザーの場合は自分のセッションIDの投稿のみ、会員は通常の投稿のみ
+    const where = guestSessionId
+      ? { userId: user.id, guestSessionId }
+      : { userId: user.id, guestSessionId: null };
 
     const posts = await prisma.post.findMany({
-      where: { userId: user.id },
+      where,
       orderBy: { createdAt: "desc" },
       include: {
         memo: {

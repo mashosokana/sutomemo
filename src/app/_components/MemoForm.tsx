@@ -93,11 +93,18 @@ export default function MemoForm(props: MemoFormProps) {
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try {
-          const errJson = await res.json();
-          if (typeof errJson?.error === "string") msg = errJson.error;
-        } catch {
           const text = await res.text();
-          if (text) msg = text;
+          if (text) {
+            try {
+              const errJson = JSON.parse(text);
+              if (typeof errJson?.error === "string") msg = errJson.error;
+              else msg = text;
+            } catch {
+              msg = text;
+            }
+          }
+        } catch {
+          // Failed to read response body
         }
         throw new Error(msg);
       }
