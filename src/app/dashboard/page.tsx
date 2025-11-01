@@ -41,21 +41,9 @@ export default function DashboardPage() {
     const fetchDashboardData = async () => {
       setLoadingData(true);
       try {
-        // ゲストセッションIDを取得
-        const guestSessionId = typeof window !== 'undefined'
-          ? sessionStorage.getItem('guestSessionId')
-          : null;
-
-        const headers: Record<string, string> = {
-          Authorization: `Bearer ${token}`,
-        };
-        if (guestSessionId) {
-          headers['X-Guest-Session-Id'] = guestSessionId;
-        }
-
         // 統計データを取得
         const statsRes = await fetch("/api/dashboard/stats", {
-          headers,
+          headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
         const statsData = await statsRes.json();
@@ -66,7 +54,7 @@ export default function DashboardPage() {
 
         // 最近の投稿3件を取得
         const postsRes = await fetch("/api/dashboard/recent-posts?limit=3", {
-          headers,
+          headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
         const postsData = await postsRes.json();

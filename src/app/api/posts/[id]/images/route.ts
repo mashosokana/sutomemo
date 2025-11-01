@@ -40,18 +40,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return jsonNoStore({ error: "file is required (field name must be 'file')" }, { status: 400 });
     }
 
-    // ファイルサイズ制限の厳格化（5MB）
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    if (file.size > MAX_FILE_SIZE) {
-      return jsonNoStore({ error: "画像サイズは5MB以下にしてください" }, { status: 400 });
-    }
-
-    // MIMEタイプ検証（基本チェック）
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
-    if (!allowedTypes.includes(file.type.toLowerCase())) {
-      return jsonNoStore({ error: "JPEG、PNG、WebP、HEIC形式の画像のみアップロード可能です" }, { status: 400 });
-    }
-
+    
     const safeName = file.name.replace(/[^\w.\-]/g, "_");
     const key = `private/${postId}/${Date.now()}-${safeName}`;
 

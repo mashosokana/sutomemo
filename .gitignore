@@ -41,10 +41,3 @@ next-env.d.ts
 
 # claude test directory - keep everything private
 /.claude/test/
-
-# Local development and testing
-.env.supabase
-.env.local
-/supabase/
-/prisma/migrations/20251030114757_add_plan_tier/
-*.md

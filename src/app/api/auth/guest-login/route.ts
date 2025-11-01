@@ -1,6 +1,5 @@
 // src/app/api/auth/guest-login/route.ts
 import 'server-only';
-import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { jsonNoStore } from '@/lib/http';
 
@@ -32,10 +31,6 @@ export async function POST() {
     }
 
     const { session } = data;
-
-    // ゲスト専用のセッションIDを生成（投稿の分離用）
-    const guestSessionId = randomUUID();
-
     return jsonNoStore({
       ok: true,
       access_token: session.access_token,
@@ -43,7 +38,6 @@ export async function POST() {
       expires_at: session.expires_at,
       token_type: session.token_type ?? 'bearer',
       user: { id: session.user.id, email: session.user.email },
-      guestSessionId, // クライアントはこれをsessionStorageに保存
     }, { status: 200 });
   } catch (e) {
     console.error('[guest-login] unexpected', e);

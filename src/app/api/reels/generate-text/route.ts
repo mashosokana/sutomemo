@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { openai, retryWithBackoff, validateOpenAIResponse, parseAndValidateJSON } from '@/lib/openai';
 import { checkSafety } from '@/lib/reels/safety';
-import { verifyUser } from '@/lib/auth';
 
 /**
  * AIによるリールテキスト生成API
@@ -49,11 +48,6 @@ function isGeneratedText(data: unknown): data is GeneratedText {
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, status, error } = await verifyUser(request as unknown as Request);
-    if (!user) {
-      return NextResponse.json({ error: error ?? 'Unauthorized' }, { status });
-    }
-
     const body: GenerateTextRequest = await request.json();
 
     // バリデーション

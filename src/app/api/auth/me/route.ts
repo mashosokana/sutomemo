@@ -1,5 +1,5 @@
 // src/app/api/auth/me/route.ts
-import { verifyUser, isPaidPlan } from "@/lib/auth"; 
+import { verifyUser } from "@/lib/auth"; 
 import { jsonNoStore } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -19,13 +19,5 @@ export async function GET(req: Request) {
 
   const guestEmail = process.env.GUEST_USER_EMAIL ?? "";
   const isGuest = guestEmail ? eqEmail(result.user.email, guestEmail) : false;
-  return jsonNoStore(
-    {
-      role: result.user.role,
-      planTier: result.user.planTier,
-      isGuest,
-      isPaid: isPaidPlan(result.user),
-    },
-    { status: 200 }
-  );
+  return jsonNoStore({ role: result.user.role, isGuest }, { status: 200 });
 }

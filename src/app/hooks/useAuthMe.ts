@@ -3,12 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type AuthMe = {
-  role: 'USER' | 'ADMIN';
-  isGuest: boolean;
-  planTier: 'FREE' | 'PRO' | 'ENTERPRISE';
-  isPaid: boolean;
-};
+export type AuthMe = { role: 'USER' | 'ADMIN'; isGuest: boolean };
 
 function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -17,7 +12,6 @@ function getErrorMessage(e: unknown): string {
 }
 
 export function useAuthMe() {
-  const fallbackGuest: AuthMe = { role: 'USER', isGuest: true, planTier: 'FREE', isPaid: false };
   const [data, setData] = useState<AuthMe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,17 +29,11 @@ export function useAuthMe() {
           signal: ac.signal,
         });
         setStatus(res.status);
-        if (!res.ok) {
-          if (!ac.signal.aborted) setData(fallbackGuest);
-          throw new Error(await res.text());
-        }
+        if (!res.ok) throw new Error(await res.text());
         const json = (await res.json()) as AuthMe;
         if (!ac.signal.aborted) setData(json);
       } catch (e: unknown) {
-        if (!ac.signal.aborted) {
-          setError(getErrorMessage(e));
-          setData((prev) => prev ?? fallbackGuest);
-        }
+        if (!ac.signal.aborted) setError(getErrorMessage(e));
       } finally {
         if (!ac.signal.aborted) setLoading(false);
       }

@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore, jsonError } from "@/lib/http";
-import { generateCacheKey, getCachedResult, setCachedResult } from "@/lib/aiCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,19 +29,11 @@ const platformRule = (p: "x" | "threads") =>
 export async function POST(req: NextRequest) {
   const { user, status, error } = await verifyUser(req as unknown as Request);
   if (!user) return jsonNoStore({ error: error ?? "Unauthorized" }, { status });
-
+    
   const body = await req.json();
   const parsed = Body.safeParse(body);
   if (!parsed.success) return jsonNoStore({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 });
   const { memo, platform, variants } = parsed.data;
-
-  // キャッシュチェック
-  const cacheKey = generateCacheKey(memo, platform, variants);
-  const cachedPosts = getCachedResult(cacheKey);
-  if (cachedPosts) {
-    console.log(`[AI Cache Hit] key=${cacheKey}`);
-    return jsonNoStore({ posts: cachedPosts, cached: true }, { status: 200 });
-  }
 
   // 3) 環境変数チェック
   const API_KEY = process.env.OPENAI_API_KEY;
@@ -122,11 +113,5 @@ export async function POST(req: NextRequest) {
     posts = [];
   }
 
-  // キャッシュに保存
-  if (posts.length > 0) {
-    setCachedResult(cacheKey, posts);
-    console.log(`[AI Cache Set] key=${cacheKey}, count=${posts.length}`);
-  }
-
-  return jsonNoStore({ posts, cached: false }, { status: 200 });
+  return jsonNoStore({ posts }, { status: 200 });
 }
