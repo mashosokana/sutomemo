@@ -29,6 +29,7 @@ yarn-error.log*
 .env
 .env local
 .env*.local
+.env.supabase
 
 # vercel
 .vercel
@@ -41,3 +42,13 @@ next-env.d.ts
 
 # claude test directory - keep everything private
 /.claude/test/
+
+# Project documentation and planning files
+*.md
+!README.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!LICENSE.md
+
+# Supabase local files
+/supabase/
