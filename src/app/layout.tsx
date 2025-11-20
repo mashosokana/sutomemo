@@ -2,7 +2,8 @@
 
 import "./globals.css"
 import { Inter } from "next/font/google";
-import Header from "./_components/Header"; 
+import Header from "./_components/Header";
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -11,17 +12,18 @@ export const metadata = {
   description: "学習の記録メモアプリ",
 }
 
-export default function RootLayout({ 
-  children 
+export default function RootLayout({
+  children
 }: {
-  children:  React.ReactNode;
- }) {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="ja">
       <body className={`${inter.className} bg-black text-white flex justify-center`}>
         <div className="w-[393px] min-h-screen bg-black flex flex-col">
-            <Header />
+          <Header />
           <main className="flex-1 pb-8">{children}</main>
+          <Toaster />
         </div>
       </body>
     </html>
