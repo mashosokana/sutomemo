@@ -1,11 +1,52 @@
+//src/app/page.tsx
+
 'use client'
 
 import Image from "next/image";
 import Link from "next/link";
-import { useGuestLogin } from "./hooks/useGuestLogin";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { supabase } from '@/lib/supabase';
 
 export default function Home() {
-  const { loginAsGuest, loading } = useGuestLogin();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handleGuestLogin = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+
+      const res = await fetch('/api/auth/guest-login', { method: 'POST' });
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        alert(`ログイン失敗: ${body?.error ?? res.statusText}`);
+        return;
+      }
+
+      if (body.access_token && body.refresh_token) {
+        const { error } = await supabase.auth.setSession({
+          access_token: body.access_token,
+          refresh_token: body.refresh_token,
+        });
+        if (error) {
+          alert(`セッション同期失敗: ${error.message}`);
+          return;
+        }
+      } else {
+        alert('ログイン失敗: トークンが取得できませんでした');
+        return;
+      }
+
+      router.replace('/dashboard');
+    } catch (err) {
+      console.error(err);
+      alert('ログイン失敗: ネットワークエラー');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <main className="bg-white text-black w-[393px] px-6 space-y-6">
@@ -22,7 +63,7 @@ export default function Home() {
               alt="悩んでいる人"
               fill
               priority
-              sizes="134px"
+              sizes="134px" 
               className="object-contain"
             />
           </div>
@@ -37,7 +78,7 @@ export default function Home() {
             width={343}
             height={172}
             priority
-            className="w-auto h-auto"
+            style={{ width: "auto", height: "auto" }}
           />
         </div>
 
@@ -62,7 +103,7 @@ export default function Home() {
             </button>
           </Link>
           <button
-            onClick={loginAsGuest}
+            onClick={handleGuestLogin}
             className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
             disabled={loading}
           >
@@ -83,14 +124,14 @@ export default function Home() {
               「よし、今週こそは毎日投稿しよう」
               そう思ってアプリを開いたものの、投稿が1回もできずに終わる。
             </p>
-            <div className="w-[155px] h-auto">
-              <Image
-                src="/icons/1750995.jpg"
-                alt="メモする人"
-                width={155}
+            <div style={{ width: 155, height: "auto" }}>
+              <Image 
+                src="/icons/1750995.jpg" 
+                alt="メモする人" 
+                width={155} 
                 height={124}
                 priority
-                className="h-auto"
+                style={{ height: "auto" }} 
               />
             </div>
           </div>
@@ -107,13 +148,13 @@ export default function Home() {
             </p>
           </div>
           <div className="bg-white p-4 rounded-lg flex flex-col items-center text-center space-y-4">
-            <Image
-              src="/icons/2466299.jpg"
-              alt="sns"
-              width={215}
+            <Image 
+              src="/icons/2466299.jpg" 
+              alt="sns" 
+              width={215} 
               height={167}
-              priority
-              className="w-auto h-auto"
+              priority 
+              style={{ width: "auto", height: "auto" }}
             />
             <p className="mb-2 flex-1 mr-4">
               「続けられなかったあなた」<br />
@@ -139,7 +180,7 @@ export default function Home() {
             </button>
           </Link>
           <button
-            onClick={loginAsGuest}
+            onClick={handleGuestLogin}
             className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
             disabled={loading}
           >
