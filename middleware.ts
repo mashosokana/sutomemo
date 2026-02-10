@@ -22,7 +22,11 @@ const APP_ORIGIN = (() => {
 const generateNonce = () => {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes));
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 };
 
 const buildCsp = (nonce: string) => {
