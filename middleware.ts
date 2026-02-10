@@ -30,7 +30,7 @@ const buildCsp = (nonce: string) => {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
     `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
-    "img-src 'self' data: https:",
+    "img-src 'self' data: https: blob:",
     "font-src 'self' data:",
     `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS}`,
     "media-src 'self' blob:",
