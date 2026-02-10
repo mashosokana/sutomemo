@@ -1,6 +1,7 @@
 // app/layout.tsx
 
 import "./globals.css"
+import Link from "next/link";
 import { Inter } from "next/font/google";
 import Header from "./_components/Header"; 
 
@@ -22,6 +23,11 @@ export default function RootLayout({
         <div className="w-[393px] min-h-screen bg-black flex flex-col">
             <Header />
           <main className="flex-1 pb-8">{children}</main>
+          <footer className="px-4 pb-6 text-center text-xs text-gray-400">
+            <Link href="/privacy-policy" className="underline underline-offset-2 hover:text-gray-200">
+              プライバシーポリシー
+            </Link>
+          </footer>
         </div>
       </body>
     </html>

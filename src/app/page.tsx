@@ -78,7 +78,7 @@ export default function Home() {
             width={343}
             height={172}
             priority
-            style={{ width: "auto", height: "auto" }}
+            className="w-auto h-auto"
           />
         </div>
 
@@ -124,14 +124,14 @@ export default function Home() {
               「よし、今週こそは毎日投稿しよう」
               そう思ってアプリを開いたものの、投稿が1回もできずに終わる。
             </p>
-            <div style={{ width: 155, height: "auto" }}>
+            <div className="w-[155px] h-auto">
               <Image 
                 src="/icons/1750995.jpg" 
                 alt="メモする人" 
                 width={155} 
                 height={124}
                 priority
-                style={{ height: "auto" }} 
+                className="h-auto"
               />
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function Home() {
               width={215} 
               height={167}
               priority 
-              style={{ width: "auto", height: "auto" }}
+              className="w-auto h-auto"
             />
             <p className="mb-2 flex-1 mr-4">
               「続けられなかったあなた」<br />

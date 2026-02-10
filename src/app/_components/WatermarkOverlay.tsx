@@ -14,7 +14,7 @@ export default function WatermarkOverlay({ children, text = 'SutoMemo • Trial'
       {children}
       {isGuest && (
         <div className="pointer-events-none select-none absolute inset-0 flex items-center justify-center opacity-30">
-          <div className="font-bold tracking-wider rotate-[-18deg] text-center" style={{ fontSize: 'min(8vw, 48px)' }}>
+          <div className="font-bold tracking-wider rotate-[-18deg] text-center watermark-text">
             {text}
           </div>
         </div>

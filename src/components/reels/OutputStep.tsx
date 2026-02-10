@@ -154,14 +154,12 @@ ${textData.tags.join(' ')}
           <video
             src={videoResult.url}
             controls
-            className="w-full max-w-sm mx-auto border border-gray-300 rounded"
-            style={{ aspectRatio: '9/16' }}
+            className="w-full max-w-sm mx-auto border border-gray-300 rounded aspect-[9/16]"
             aria-label="生成された動画プレビュー"
           />
         ) : (
           <div
-            className="w-full max-w-sm mx-auto bg-black text-white flex flex-col items-center justify-center border border-gray-300 rounded"
-            style={{ aspectRatio: '9/16' }}
+            className="w-full max-w-sm mx-auto bg-black text-white flex flex-col items-center justify-center border border-gray-300 rounded aspect-[9/16]"
           >
             <p className="text-center p-4">
               {isConverting
@@ -171,12 +169,12 @@ ${textData.tags.join(' ')}
                   : '「動画を生成」ボタンを押してください'}
             </p>
             {isRendering && !isConverting && (
-              <div className="w-3/4 bg-gray-700 rounded h-2 mt-2">
-                <div
-                  className="bg-white h-2 rounded transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
+              <progress
+                className="w-3/4 h-2 rounded bg-gray-700 mt-2 appearance-none [&::-webkit-progress-bar]:bg-gray-700 [&::-webkit-progress-value]:bg-white [&::-moz-progress-bar]:bg-white"
+                value={progress}
+                max={100}
+                aria-label="レンダリング進捗"
+              />
             )}
           </div>
         )}

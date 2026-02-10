@@ -24,7 +24,10 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  .watermark-text {
+    font-size: min(8vw, 48px);
+  }
 }
 
 .blurred { filter: blur(4px); }
-

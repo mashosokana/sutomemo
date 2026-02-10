@@ -91,7 +91,7 @@ export default function UploadStep({ onNext }: UploadStepProps) {
           <div className="border border-gray-300 rounded p-4 bg-gray-50">
             <p className="text-sm font-bold text-black mb-2">プレビュー:</p>
             {selectedFile?.type.startsWith('image/') ? (
-              <div className="relative w-full max-w-md mx-auto" style={{ maxHeight: '256px' }}>
+              <div className="relative w-full max-w-md mx-auto max-h-64">
                 <Image
                   src={preview}
                   alt="選択した画像"
