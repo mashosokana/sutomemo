@@ -14,7 +14,6 @@ export default function SimpleMemoPage() {
 
   // 画像関連
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const [uploadedImageFile, setUploadedImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -81,7 +80,6 @@ export default function SimpleMemoPage() {
     try {
       const localUrl = URL.createObjectURL(file);
       setUploadedImageUrl(localUrl);
-      setUploadedImageFile(file);
     } catch (error) {
       console.error("Image upload error:", error);
       alert("画像のアップロードに失敗しました");
@@ -207,7 +205,6 @@ export default function SimpleMemoPage() {
   const handleCreateAnother = () => {
     setTodayActivity("");
     setUploadedImageUrl(null);
-    setUploadedImageFile(null);
     setSaveSuccess(false);
   };
 

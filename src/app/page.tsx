@@ -192,7 +192,7 @@ export default function Home() {
           {/* 解決策 */}
           <div className="bg-[#FFF5E6] p-4 rounded-lg border-2 border-[#E8D5C4]">
             <p className="mb-3">
-              そんな経験ありませんか？SutoMemoは、考える前に<span className="font-bold text-gray-800">"作れる"</span>習慣をつくります。
+              そんな経験ありませんか？SutoMemoは、考える前に<span className="font-bold text-gray-800">&ldquo;作れる&rdquo;</span>習慣をつくります。
             </p>
             <p>
               画像を見ながらテキストを書けるから、自然と言葉が出てくる。ドラッグで位置を調整、スライダーでサイズ変更。直感的な操作で誰でも使えます。

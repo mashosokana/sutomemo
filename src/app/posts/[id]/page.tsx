@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 import FabricCanvasEditor, { FabricCanvasEditorRef } from '@/app/_components/FabricCanvasEditor';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -40,7 +41,6 @@ export default function PostDetailPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -93,7 +93,6 @@ export default function PostDetailPage() {
     try {
       const localUrl = URL.createObjectURL(file);
       setNewImageUrl(localUrl);
-      setNewImageFile(file);
     } catch (error) {
       console.error('Image upload error:', error);
       alert('画像のアップロードに失敗しました');
@@ -176,7 +175,6 @@ export default function PostDetailPage() {
       alert('更新しました！');
       setIsEditMode(false);
       setNewImageUrl(null);
-      setNewImageFile(null);
     } catch (error) {
       console.error('Save error:', error);
       alert(error instanceof Error ? error.message : '更新に失敗しました');
@@ -290,11 +288,14 @@ export default function PostDetailPage() {
           <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
             <h2 className="font-bold mb-6 text-2xl">{isEditMode ? '現在の画像' : '画像'}</h2>
             <div className="flex justify-center">
-              <img
+              <Image
                 src={imageUrl}
                 alt="投稿画像"
+                width={800}
+                height={800}
                 className="max-w-full h-auto rounded-lg border-2 border-gray-200"
                 style={{ maxHeight: '800px' }}
+                unoptimized
               />
             </div>
           </div>
@@ -333,7 +334,6 @@ export default function PostDetailPage() {
                   onClick={() => {
                     setIsEditMode(false);
                     setNewImageUrl(null);
-                    setNewImageFile(null);
                   }}
                   className="w-full bg-gray-200 text-gray-800 py-5 rounded-lg font-bold text-lg hover:bg-gray-300 transition"
                 >
