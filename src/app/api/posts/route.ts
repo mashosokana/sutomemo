@@ -1,16 +1,10 @@
 // src/app/api/posts/route.ts
 import { prisma } from "@/lib/prisma";
-import { getPublicThumbUrl, createSignedUrl } from "@/lib/images";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
-import { IMAGE_BUCKET } from "@/lib/buckets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const SIGNED_URL_TTL = 60 * 60;        
-
-const nonEmpty = (v?: string | null) => (v && v.trim() !== "" ? v : undefined);
 
 function isGuestEmail(email?: string | null): boolean {
   const a = (email ?? "").trim().toLowerCase();
@@ -81,7 +75,10 @@ export async function GET(req: Request) {
     const posts = await prisma.post.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
-      include: {
+      select: {
+        id: true,
+        caption: true,
+        createdAt: true,
         memo: {
           select: {
             id: true,
@@ -93,63 +90,17 @@ export async function GET(req: Request) {
             updatedAt: true,
           },
         },
-        images: {
-          orderBy: { generatedAt: "desc" },
-          select: { id: true, imageKey: true },
-        },
       },
     });
 
-    const postsWithUrls = await Promise.all(
-      posts.map(async (post) => {
+    const cleaned = posts.map((post) => ({
+      id: post.id,
+      caption: post.caption,
+      createdAt: post.createdAt,
+      memo: post.memo ?? null,
+    }));
 
-        const thumbKey = post.thumbnailImageKey ?? undefined;
-
-
-        const nonHeic = post.images.filter(
-          (img) => !/\.hei(c|f)$/i.test(img.imageKey)
-        );
-
-
-        const thumbUrl = getPublicThumbUrl(thumbKey, 120, 120);
-
-
-        let fallbackUrl: string | undefined = undefined;
-        if (!thumbUrl) {
-          const firstKey = nonHeic[0]?.imageKey;
-          if (firstKey) {
-            const tinySigned = await createSignedUrl(
-              IMAGE_BUCKET,
-              firstKey,
-              SIGNED_URL_TTL,
-              { width: 120, height: 120, resize: "cover" }
-            );
-            fallbackUrl = nonEmpty(tinySigned);
-          }
-        }
-
-        const signedImages = await Promise.all(
-          nonHeic.map(async (img) => {
-            const url = await createSignedUrl(IMAGE_BUCKET, img.imageKey, SIGNED_URL_TTL);
-            const u = nonEmpty(url);
-            return u ? { id: img.id, imageKey: img.imageKey, signedUrl: u } : null;
-          })
-        );
-
-        const imageUrl = thumbUrl ?? fallbackUrl;
-
-        return {
-          id: post.id,
-          caption: post.caption,
-          createdAt: post.createdAt,
-          memo: post.memo,
-          ...(imageUrl ? { imageUrl } : {}), 
-          images: signedImages.filter((x): x is NonNullable<typeof x> => !!x),
-        };
-      })
-    );
-
-    return jsonNoStore({ posts: postsWithUrls }, { status: 200 });
+    return jsonNoStore({ posts: cleaned }, { status: 200 });
   } catch (e) {
     console.error("GET /api/posts error:", e);
     return jsonNoStore({ error: "投稿一覧の取得に失敗しました" }, { status: 500 });

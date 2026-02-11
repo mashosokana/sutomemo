@@ -1,6 +1,6 @@
 // src/app/api/dashboard/recent-posts/route.ts
 import { prisma } from "@/lib/prisma";
-import { getPublicThumbUrl, createSignedUrl } from "@/lib/images";
+import { createSignedUrl } from "@/lib/images";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 import { IMAGE_BUCKET } from "@/lib/buckets";
@@ -31,7 +31,11 @@ export async function GET(req: Request) {
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: {
+      select: {
+        id: true,
+        caption: true,
+        status: true,
+        createdAt: true,
         memo: {
           select: {
             answerWhy: true,
@@ -52,13 +56,8 @@ export async function GET(req: Request) {
       posts.map(async (post) => {
         let imageUrl: string | undefined = undefined;
 
-        // サムネイルまたは最初の画像のURLを取得
-        const thumbKey = post.thumbnailImageKey ?? undefined;
-        const thumbUrl = getPublicThumbUrl(thumbKey, 120, 120);
-
-        if (thumbUrl) {
-          imageUrl = thumbUrl;
-        } else if (post.images[0]) {
+        // 最初の画像（非HEIC）だけサムネ生成
+        if (post.images[0]) {
           const firstKey = post.images[0].imageKey;
           if (!/\.hei(c|f)$/i.test(firstKey)) {
             const tinySigned = await createSignedUrl(

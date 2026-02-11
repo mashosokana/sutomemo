@@ -1,22 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
-import { useAuthMe } from '@/app/hooks/useAuthMe';
-import { useImageOverlayEditor } from '@/app/hooks/useImageOverlayEditor';
-import ImageFileInput from '@/app/_components/ImageFileInput';
-import MemberGateButton from '@/app/_components/MemberGateButton';
-import WatermarkOverlay from '@/app/_components/WatermarkOverlay';
-import BlurredTextPreview from '@/app/_components/BlurredTextPreview';
-import TrialNotice from '@/app/_components/TrialNotice';
+import FabricCanvasEditor, { FabricCanvasEditorRef } from '@/app/_components/FabricCanvasEditor';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faXTwitter, faThreads } from '@fortawesome/free-brands-svg-icons';
-import { authedFetch } from '@/lib/authedFetch';
 
 type ApiMemo = { answerWhy?: string | null; answerWhat?: string | null; answerNext?: string | null };
 type ApiImage = { id: number; imageKey: string; signedUrl?: string };
-type ApiPost  = { id: number; caption: string; memo?: ApiMemo | null; images?: ApiImage[] };
+type ApiPost = { id: number; caption: string; memo?: ApiMemo | null; images?: ApiImage[] };
 
 function parsePost(resp: unknown): ApiPost | null {
   if (!resp || typeof resp !== 'object') return null;
@@ -28,15 +21,7 @@ function parsePost(resp: unknown): ApiPost | null {
   const images = Array.isArray(p.images) ? (p.images as ApiImage[]) : [];
   return id ? { id, caption, memo, images } : null;
 }
-function buildEditorSeed(post: ApiPost): string {
-  return typeof post.caption === 'string' ? post.caption : '';
-}
-type GuestDraft = { caption: string };
-function buildSeedFromDraft(d: GuestDraft): string {
-  return typeof d.caption === 'string' ? d.caption : '';
-}
 
-// 最初の1枚だけ採用
 function pickFirstImageUrl(post: ApiPost | null): string | null {
   if (!post) return null;
   const first = (post.images ?? []).find(img => typeof img.signedUrl === 'string' && img.signedUrl);
@@ -44,414 +29,361 @@ function pickFirstImageUrl(post: ApiPost | null): string | null {
 }
 
 export default function PostDetailPage() {
-  // ---- Hooks（順序固定・無条件）----
   const { id } = useParams<{ id: string }>();
   const postId = Number(id);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isTrial = searchParams.has('trial'); // 体験モード
 
   const { token, isLoading: tokenLoading } = useSupabaseSession();
-  const { data: me, loading: meLoading } = useAuthMe();
+  const canvasRef = useRef<FabricCanvasEditorRef>(null);
 
-  // 体験 or 非ログイン はゲストUI（ぼかし等）扱い
-  const isGuest = isTrial || !token;
-  // シェア許可の厳密判定：
-  // - 体験モードでない
-  // - me のロード完了
-  // - me.isGuest が false（会員）
-  // これにより、判定不能（me 未取得/エラー）時はシェア不可に倒す
-  const canShare = !isTrial && !meLoading && me?.isGuest === false;
+  const [caption, setCaption] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const userEditedRef = useRef(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const lastLoadedUrlRef = useRef<string | null>(null);
-
-  const {
-    text, setText,
-    textBoxSize, setTextBoxSize,
-    dragOffset,
-    isProcessing,
-    drawOnCanvas,
-    bindCanvasDrag,
-    downloadCanvas,
-    previewLocalFile,
-    fontSize,
-    setFontSize,
-  } = useImageOverlayEditor({ postId });
-
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadDoneMsg, setUploadDoneMsg] = useState<string | null>(null);
-  const [isMobileEditorOpen, setMobileEditorOpen] = useState(false);
-
-  // ★ shareDisabled は処理状態のみで制御（会員判定は canShare ブランチで分岐）
-  const shareDisabled = isProcessing || isUploading;
-
-  // 共有URL
-  const xShareUrl = useMemo(() => {
-    const t = (text ?? '').slice(0, 280);
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    const combined = url ? `${t}\n\n${url}` : t;
-    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`;
-  }, [text]);
-  const threadsShareUrl = useMemo(() => {
-    const t = (text ?? '').slice(0, 500);
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    const combined = url ? `${t}\n\n${url}` : t;
-    const params = new URLSearchParams({ text: combined });
-    return `https://www.threads.net/intent/post?${params.toString()}`;
-  }, [text]);
-
-  // 非トライアル時のみ：未ログインは /login へ
+  // ログインチェック
   useEffect(() => {
-    if (isTrial) return;
     if (tokenLoading) return;
-    if (token === null) {
-      const next = typeof window !== 'undefined'
-        ? window.location.pathname + window.location.search
-        : `/posts/${postId}`;
-      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    if (!token) {
+      router.replace('/login');
     }
-  }, [isTrial, tokenLoading, token, router, postId]);
+  }, [tokenLoading, token, router]);
 
-  // 通常読み込み：ログイン時のみ投稿＆最初の1枚を取得
+  // 投稿データ取得
   useEffect(() => {
-    if (!token || !postId || isTrial) return;
-    (async () => {
-      try {
-        const res = await authedFetch(`/api/posts/${postId}`, token, { cache: 'no-store' });
-        if (!res.ok) return;
-        const json: unknown = await res.json().catch(() => null);
-        const post = parsePost(json);
+    if (!token || !postId) return;
 
-        if (post && !userEditedRef.current) {
-          setText(buildEditorSeed(post));
+    const fetchPost = async () => {
+      try {
+        const res = await fetch(`/api/posts/${postId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+
+        if (!res.ok) {
+          throw new Error('投稿の取得に失敗しました');
         }
 
-        const url = pickFirstImageUrl(post);
-        if (!url || url === lastLoadedUrlRef.current) return;
-        const r = await fetch(url);
-        if (!r.ok) return;
-        const blob = await r.blob();
-        const file = new File([blob], `post-${postId}-first.jpg`, { type: blob.type || 'image/jpeg' });
-        void previewLocalFile(file);
-        lastLoadedUrlRef.current = url;
-      } catch {}
-    })();
-  }, [token, postId, isTrial, setText, previewLocalFile]);
+        const json = await res.json();
+        const post = parsePost(json);
 
-  // 体験：AIメモを sessionStorage から反映
-  useEffect(() => {
-    if (!isTrial) return;
-    try {
-      const raw = sessionStorage.getItem('guestDraft');
-      if (!raw) return;
-      const draft = JSON.parse(raw) as GuestDraft;
-      const seed = buildSeedFromDraft(draft);
-      if (seed.trim() !== '') {
-        userEditedRef.current = true;
-        setText(seed);
+        if (post) {
+          setCaption(post.caption || '');
+          const url = pickFirstImageUrl(post);
+          setImageUrl(url);
+        }
+      } catch (error) {
+        console.error('Error fetching post:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch {}
-  }, [isTrial, setText]);
-
-  // キャンバス再描画
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    void drawOnCanvas(canvasRef.current);
-  }, [text, textBoxSize, dragOffset, fontSize, drawOnCanvas]);
-
-  useEffect(() => {
-    if (!isMobileEditorOpen) return;
-    const { style } = document.body;
-    const originalOverflow = style.overflow;
-    style.overflow = 'hidden';
-    return () => {
-      style.overflow = originalOverflow;
     };
-  }, [isMobileEditorOpen]);
 
-  // 表示許可：トライアルは常にOK / 通常はログイン時のみ
-  const canUsePage = isTrial || (!tokenLoading && !!token);
-  if (!canUsePage) return null;
+    fetchPost();
+  }, [token, postId]);
 
-  // 画像：サーバ保存後も「最初の1枚だけ」で再反映
-  const reloadFirstImage = async () => {
-    if (!token || isTrial) return;
+  // 新しい画像のアップロード
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     try {
-      const res = await authedFetch(`/api/posts/${postId}`, token, { cache: 'no-store' });
-      if (!res.ok) return;
-      const post = parsePost(await res.json().catch(() => null));
-      const url = pickFirstImageUrl(post);
-      if (!url || url === lastLoadedUrlRef.current) return;
-      const r = await fetch(url);
-      if (!r.ok) return;
-      const blob = await r.blob();
-      const file = new File([blob], `post-${postId}-first.jpg`, { type: blob.type || 'image/jpeg' });
-      void previewLocalFile(file);
-      lastLoadedUrlRef.current = url;
-    } catch {}
+      const localUrl = URL.createObjectURL(file);
+      setNewImageUrl(localUrl);
+      setNewImageFile(file);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      alert('画像のアップロードに失敗しました');
+    }
   };
 
-  const uploadFiles = async (files: File[]): Promise<void> => {
-    if (files.length === 0) return;
-
-    if (isTrial) {
-      if (files[0]) void previewLocalFile(files[0]);
-      setUploadError('画像のサーバ保存は会員限定です。登録すると保存できます。');
+  // 保存処理
+  const handleSave = async () => {
+    if (!caption.trim()) {
+      alert('テキストを入力してください');
       return;
     }
 
     if (!token) {
-      setUploadError('ログイン情報が取得できませんでした');
+      alert('認証エラーが発生しました');
       return;
     }
 
-    for (const file of files) void previewLocalFile(file);
-
-    setIsUploading(true);
-    setUploadError(null);
-    setUploadDoneMsg(null);
+    setIsSaving(true);
     try {
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append('file', file);
-        const res = await authedFetch(`/api/posts/${postId}/images`, token, { method: 'POST', body: fd });
-        if (!res.ok) {
-          const data: unknown = await res.json().catch(() => ({}));
-          const msg = (data as { error?: string }).error ?? `アップロードに失敗しました (HTTP ${res.status})`;
-          throw new Error(msg);
+      // 1. テキストを更新
+      const updateRes = await fetch(`/api/posts/${postId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          caption: caption,
+        }),
+      });
+
+      if (!updateRes.ok) {
+        const errorData = await updateRes.json();
+        throw new Error(errorData.error || 'テキストの更新に失敗しました');
+      }
+
+      // 2. 新しい画像がある場合はアップロード
+      if (newImageUrl && canvasRef.current) {
+        const blob = await canvasRef.current.getCanvasBlob();
+        if (!blob) {
+          throw new Error('画像の生成に失敗しました');
+        }
+
+        const file = new File([blob], `memo-${Date.now()}.png`, {
+          type: 'image/png',
+        });
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const imageRes = await fetch(`/api/posts/${postId}/images`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!imageRes.ok) {
+          const errorData = await imageRes.json();
+          throw new Error(errorData.error || '画像のアップロードに失敗しました');
+        }
+
+        // 新しい画像URLを取得
+        const res = await fetch(`/api/posts/${postId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const post = parsePost(json);
+          if (post) {
+            const url = pickFirstImageUrl(post);
+            setImageUrl(url);
+          }
         }
       }
-      setUploadDoneMsg('画像をアップロードしました');
-      await reloadFirstImage();
-    } catch (e: unknown) {
-      setUploadError(e instanceof Error ? e.message : String(e));
+
+      alert('更新しました！');
+      setIsEditMode(false);
+      setNewImageUrl(null);
+      setNewImageFile(null);
+    } catch (error) {
+      console.error('Save error:', error);
+      alert(error instanceof Error ? error.message : '更新に失敗しました');
     } finally {
-      setIsUploading(false);
+      setIsSaving(false);
     }
   };
 
+  const handleDownload = async () => {
+    if (!imageUrl) return;
+
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `post-${postId}.png`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('ダウンロードに失敗しました');
+    }
+  };
+
+  const handleShare = (platform: 'x' | 'threads') => {
+    const text = caption.slice(0, platform === 'x' ? 280 : 500);
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${text}\n\n${url}` : text;
+
+    if (platform === 'x') {
+      window.open(
+        `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`,
+        '_blank'
+      );
+    } else {
+      const params = new URLSearchParams({ text: combined });
+      window.open(
+        `https://www.threads.net/intent/post?${params.toString()}`,
+        '_blank'
+      );
+    }
+  };
+
+  if (tokenLoading || isLoading) {
+    return (
+      <div className="max-w-5xl mx-auto p-4 md:p-6 bg-white min-h-screen">
+        <p className="text-center py-8">読み込み中...</p>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return null;
+  }
+
   return (
-    <main className="flex flex-col items-center p-2 max-w-2xl mx-auto bg-white text-black pb-40 sm:pb-32">
-      <h1 className="text-base font-semibold mb-3">投稿詳細</h1>
+    <main className="max-w-5xl mx-auto p-4 md:p-6 bg-white min-h-screen">
+      {/* ヘッダー */}
+      <div className="mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+          {isEditMode ? '投稿編集' : '投稿詳細'}
+        </h1>
+        <p className="text-gray-600 mt-1">
+          {isEditMode
+            ? 'テキストと画像を編集できます'
+            : '画像をダウンロード・共有できます'}
+        </p>
+      </div>
 
-      <div className="space-y-4 w-full flex flex-col items-center">
-        <WatermarkOverlay>
-          <canvas
-            ref={canvasRef}
-            onPointerDown={bindCanvasDrag}
-            onContextMenu={(e) => e.preventDefault()}
-            className="border border-black w-[300px] h-auto touch-none select-none"
-          />
-        </WatermarkOverlay>
-
-        <div className="w-full flex flex-col items-center gap-2">
-          <label className="px-4 py-2 bg-blue-500 text-white rounded cursor-pointer">
-            ギャラリー / ファイル選択
-            <ImageFileInput
-              onPick={uploadFiles}
-              to="image/jpeg"
-              quality={0.9}
-              multiple
-              disabled={isProcessing || isUploading}
-              className="hidden"
-            />
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* テキスト表示・編集 */}
+        <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
+          <label htmlFor="caption" className="block font-bold mb-4 text-xl">
+            投稿テキスト
           </label>
-
-          {isTrial && <TrialNotice className="w-full mt-2" />}
-
-          {isUploading && <p className="text-xs text-blue-600">アップロード中…</p>}
-          {uploadDoneMsg && <span className="text-green-700 text-sm">{uploadDoneMsg}</span>}
-          {uploadError && <span className="text-red-600 text-sm">{uploadError}</span>}
-        </div>
-
-        {/* ゲストはテキストぼかし */}
-        {isGuest ? (
-          <div className="w-full border rounded p-3">
-            <h3 className="font-semibold mb-2 text-sm">プレビュー</h3>
-            <BlurredTextPreview
-              text={text}
-              limit={500}
-              onUnlock={() => router.push('/signup')}
-            />
-          </div>
-        ) : (
-          <>
+          {isEditMode ? (
             <textarea
-              value={text}
-              onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
-              rows={10}
-              className="hidden sm:block w-full border p-2 rounded min-h-[180px] max-h-[60vh] overflow-auto resize-y"
-              disabled={isProcessing || isUploading}
-              placeholder="作成時の caption がここに入ります。自由に編集できます。"
+              id="caption"
+              className="w-full border-2 border-gray-300 px-6 py-5 rounded-lg text-black bg-white placeholder:text-gray-400 min-h-64 resize-y text-lg leading-relaxed focus:border-blue-500 focus:outline-none"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="投稿のテキストを編集..."
             />
+          ) : (
+            <div className="w-full border-2 border-gray-300 px-6 py-5 rounded-lg text-black bg-gray-50 min-h-64 text-lg leading-relaxed whitespace-pre-wrap">
+              {caption}
+            </div>
+          )}
+        </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (isProcessing || isUploading) return;
-                setMobileEditorOpen(true);
-              }}
-              className="w-full sm:hidden border rounded p-3 flex flex-col gap-3 text-left bg-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:bg-gray-50 disabled:opacity-50"
-              disabled={isProcessing || isUploading}
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-sm">スマホ編集</h3>
-                <span className="text-xs text-gray-500">
-                  {(text ?? '').length}文字
-                </span>
-              </div>
-              <p className="text-sm whitespace-pre-wrap break-words min-h-[96px] text-gray-800">
-                {(text ?? '').trim() !== ''
-                  ? text
-                  : '作成時の caption がここに表示されます。'}
-              </p>
-              <span className="text-xs text-blue-600 self-end">タップして編集</span>
-            </button>
-          </>
+        {/* 編集モード: 新しい画像の編集エリア */}
+        {isEditMode && newImageUrl && (
+          <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
+            <h2 className="font-bold mb-3 text-2xl">新しい画像のプレビュー</h2>
+            <p className="text-gray-600 mb-6 text-base">
+              白いボックスをドラッグして位置を調整し、スライダーでサイズを変更できます。
+            </p>
+            <FabricCanvasEditor
+              ref={canvasRef}
+              imageUrl={newImageUrl}
+              initialText={caption}
+              onTextChange={setCaption}
+            />
+          </div>
         )}
 
-        {/* ▼ シェア（会員のみ有効。その他はサインアップ誘導） */}
-        {!canShare ? (
-          <>
-            <button
-              onClick={() => router.push('/signup')}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-black text-white rounded opacity-70 cursor-not-allowed"
-              aria-disabled
-            >
-              Xでシェア
-            </button>
-            <button
-              onClick={() => router.push('/signup')}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded opacity-70 cursor-not-allowed"
-              aria-disabled
-            >
-              Threadsでシェア
-            </button>
-          </>
-        ) : (
-          <>
-            <a
-              href={xShareUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                if (shareDisabled) { e.preventDefault(); }
-              }}
-              className={`flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition ${
-                shareDisabled ? 'pointer-events-none opacity-50' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faXTwitter} />
-              Xでシェア
-            </a>
-
-            <a
-              href={threadsShareUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => {
-                if (shareDisabled) { e.preventDefault(); }
-              }}
-              className={`flex items-center gap-2 px-4 py-2 bg-[#2C2C2C] text-white rounded hover:opacity-80 transition ${
-                shareDisabled ? 'pointer-events-none opacity-50' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faThreads} />
-              Threadsでシェア
-            </a>
-          </>
+        {/* 既存画像の表示（編集モードで新しい画像がない場合、または通常モード） */}
+        {!newImageUrl && imageUrl && (
+          <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
+            <h2 className="font-bold mb-6 text-2xl">{isEditMode ? '現在の画像' : '画像'}</h2>
+            <div className="flex justify-center">
+              <img
+                src={imageUrl}
+                alt="投稿画像"
+                className="max-w-full h-auto rounded-lg border-2 border-gray-200"
+                style={{ maxHeight: '800px' }}
+              />
+            </div>
+          </div>
         )}
-      </div>
 
-      <div className="fixed left-0 right-0 z-50 border-t bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 w-screen bottom-0">
-        <div
-          className="
-            mx-auto w-full max-w-[min(100vw,420px)]
-            px-2 py-2 grid gap-2 items-center
-            grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-4
-          "
-        >
-          <label className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs">幅</span>
+        {/* 編集モード: 画像アップロード */}
+        {isEditMode && (
+          <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
+            <label className="block font-bold mb-4 text-xl">新しい画像（オプション）</label>
+            <p className="text-gray-600 mb-4 text-base">
+              新しい画像をアップロードして、テキストを配置し直すことができます
+            </p>
             <input
-              type="range" min={100} max={260}
-              value={textBoxSize.width}
-              onChange={(e) => setTextBoxSize(s => ({ ...s, width: Number(e.target.value) }))}
-              disabled={isProcessing || isUploading}
-              className="w-full"
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="block w-full text-base text-gray-900 border-2 border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none p-4 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-base file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
-          </label>
-
-          <label className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs">高さ</span>
-            <input
-              type="range" min={50} max={480}
-              value={textBoxSize.height}
-              onChange={(e) => setTextBoxSize(s => ({ ...s, height: Number(e.target.value) }))}
-              disabled={isProcessing || isUploading}
-              className="w-full"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs">サイズ</span>
-            <select
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              disabled={isProcessing || isUploading}
-              className="w-full text-sm border rounded px-2 py-1"
-            >
-              {Array.from({ length: 10 }, (_, i) => 9 + i).map((n) => (
-                <option key={n} value={n}>{n}px</option>
-              ))}
-            </select>
-          </label>
-
-          <MemberGateButton
-            onAllow={() => downloadCanvas(canvasRef.current, `post-${postId}-with-text.png`)}
-            labelMember="ダウンロード"
-            labelGuest="新規登録はこちら"
-            className="w-full text-sm bg-black text-white px-2 py-2 rounded hover:bg-gray-800 disabled:opacity-50"
-            disabled={isProcessing || isUploading}
-          />
-        </div>
-      </div>
-
-      {isMobileEditorOpen && (
-        <div className="fixed inset-0 z-[120] bg-white flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <span className="text-sm font-semibold">テキスト編集</span>
-            <button
-              type="button"
-              onClick={() => setMobileEditorOpen(false)}
-              className="text-sm text-gray-500"
-            >
-              キャンセル
-            </button>
           </div>
-          <textarea
-            value={text}
-            onChange={(e) => { userEditedRef.current = true; setText(e.target.value); }}
-            className="flex-1 p-4 text-sm leading-relaxed focus:outline-none resize-none"
-            placeholder="作成時の caption がここに入ります。自由に編集できます。"
-            disabled={isProcessing || isUploading}
-            autoFocus
-          />
-          <div className="border-t px-4 py-3 flex items-center justify-between text-xs text-gray-500">
-            <span>{(text ?? '').length}文字</span>
-            <button
-              type="button"
-              onClick={() => setMobileEditorOpen(false)}
-              className="px-4 py-2 bg-black text-white rounded text-sm"
-            >
-              完了
-            </button>
+        )}
+
+        {/* アクションボタン */}
+        <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
+          <h2 className="font-bold mb-6 text-xl">アクション</h2>
+          <div className="space-y-4">
+            {isEditMode ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="w-full bg-blue-600 text-white py-5 rounded-lg font-bold text-lg hover:bg-blue-700 transition disabled:opacity-50"
+                >
+                  {isSaving ? '保存中...' : '変更を保存'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setNewImageUrl(null);
+                    setNewImageFile(null);
+                  }}
+                  className="w-full bg-gray-200 text-gray-800 py-5 rounded-lg font-bold text-lg hover:bg-gray-300 transition"
+                >
+                  キャンセル
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setIsEditMode(true)}
+                  className="w-full bg-blue-600 text-white py-5 rounded-lg font-bold text-lg hover:bg-blue-700 transition"
+                >
+                  編集する
+                </button>
+
+                <button
+                  onClick={handleDownload}
+                  disabled={!imageUrl}
+                  className="w-full bg-black text-white py-5 rounded-lg font-bold text-lg hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  画像をダウンロード
+                </button>
+
+                <button
+                  onClick={() => handleShare('x')}
+                  className="w-full flex items-center justify-center gap-3 bg-black text-white py-5 rounded-lg font-bold text-lg hover:bg-gray-800 transition"
+                >
+                  <FontAwesomeIcon icon={faXTwitter} className="text-2xl" />
+                  Xでシェア
+                </button>
+
+                <button
+                  onClick={() => handleShare('threads')}
+                  className="w-full flex items-center justify-center gap-3 bg-[#2C2C2C] text-white py-5 rounded-lg font-bold text-lg hover:bg-gray-600 transition"
+                >
+                  <FontAwesomeIcon icon={faThreads} className="text-2xl" />
+                  Threadsでシェア
+                </button>
+
+                <button
+                  onClick={() => router.push('/posts')}
+                  className="w-full bg-gray-200 text-gray-800 py-5 rounded-lg font-bold text-lg hover:bg-gray-300 transition"
+                >
+                  一覧に戻る
+                </button>
+              </>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </main>
   );
 }

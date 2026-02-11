@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma, Image as DbImage } from "@prisma/client";
 import { IMAGE_BUCKET } from "@/lib/buckets";
-import { getPublicThumbUrl } from "@/lib/images";
 import { verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 
@@ -43,7 +42,24 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
     const post = await prisma.post.findFirst({
       where,
-      include: { memo: true, images: { orderBy: { generatedAt: "desc" } } },
+      select: {
+        id: true,
+        userId: true,
+        caption: true,
+        createdAt: true,
+        updatedAt: true,
+        memo: true,
+        images: {
+          orderBy: { generatedAt: "desc" },
+          select: {
+            id: true,
+            postId: true,
+            imageKey: true,
+            generatedAt: true,
+            updatedAt: true,
+          },
+        },
+      },
     });
     if (!post) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
 
@@ -58,9 +74,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       })
     );
 
-    const thumbUrl = getPublicThumbUrl((post as { thumbnailImageKey?: string | null }).thumbnailImageKey ?? undefined, 600, 600);
     const firstSigned = nonEmpty(imagesWithSignedUrls[0]?.signedUrl);
-    const imageUrl = nonEmpty(thumbUrl) ?? firstSigned;
+    const imageUrl = firstSigned;
 
     return jsonNoStore({ post: { ...post, images: imagesWithSignedUrls, ...(imageUrl ? { imageUrl } : {}) } }, { status: 200 });
   } catch (e) {

@@ -38,6 +38,21 @@ export async function GET(req: Request) {
       },
     });
 
+    // 今週の投稿数を取得（日曜日始まり）
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const weekPosts = await prisma.post.count({
+      where: {
+        userId: user.id,
+        createdAt: {
+          gte: startOfWeek,
+        },
+      },
+    });
+
     // 平均反応率を計算（過去30日間のメトリクスがある投稿のみ）
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -68,6 +83,7 @@ export async function GET(req: Request) {
         totalPosts,
         publishedPosts,
         draftPosts,
+        weekPosts,
         avgEngagementRate,
       },
       { status: 200 }

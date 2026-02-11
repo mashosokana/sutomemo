@@ -1,18 +1,36 @@
 //app/_components/FabricCanvasEditor.tsx
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 
 type Props = {
   imageUrl: string;
   initialText: string;
+  onTextChange?: (text: string) => void;
 };
 
-export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
+export type FabricCanvasEditorRef = {
+  getCanvasBlob: () => Promise<Blob | null>;
+  getText: () => string;
+};
+
+const FabricCanvasEditor = forwardRef<FabricCanvasEditorRef, Props>(
+  function FabricCanvasEditor({ imageUrl, initialText, onTextChange }, ref) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [text, setText] = useState(initialText);
   const [dragOffset, setDragOffset] = useState({ x: 30, y: 200 });
   const [textBoxSize, setTextBoxSize] = useState({ width: 300, height: 400 });
+
+  // initialTextが変更されたらtextを更新
+  useEffect(() => {
+    setText(initialText);
+  }, [initialText]);
+
+  // テキスト変更ハンドラー
+  const handleTextChange = (newText: string) => {
+    setText(newText);
+    onTextChange?.(newText);
+  };
 
   // ポインタードラッグの内部状態
   const dragRef = useRef<{ active: boolean; lastX: number; lastY: number }>(
@@ -40,8 +58,8 @@ export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
     image.src = imageUrl;
 
     image.onload = () => {
-      // 幅300pxで固定表示（必要なら可変に）
-      const fixedCSSWidth = 300;
+      // 幅600pxで固定表示（大きく変更）
+      const fixedCSSWidth = 600;
 
       // 高DPRでもにじまないよう、内部ピクセルを合わせる（任意）
       const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -126,6 +144,19 @@ export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
   };
 
 
+  // 外部から呼び出せるメソッドを公開
+  useImperativeHandle(ref, () => ({
+    getCanvasBlob: async () => {
+      if (!canvasRef.current) return null;
+      return new Promise<Blob | null>((resolve) => {
+        canvasRef.current?.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/png');
+      });
+    },
+    getText: () => text,
+  }));
+
   const handleDownload = () => {
     if (!canvasRef.current) return;
     const link = document.createElement('a');
@@ -135,56 +166,93 @@ export default function FabricCanvasEditor({ imageUrl, initialText }: Props) {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-4">
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onContextMenu={(e) => e.preventDefault()}
-        className="border w-[300px] h-auto touch-none select-none"
-      />
-
-      <textarea
-        value={text}
-        onChange={e => setText(e.target.value)}
-        rows={4}
-        className="w-full border p-2 rounded"
-      />
-
-      <div className="flex flex-col sm:flex-row gap-2">
-        <label className="flex items-center gap-2">
-          幅:
-          <input
-            type="range"
-            min={100}
-            max={300}
-            value={textBoxSize.width}
-            onChange={e =>
-              setTextBoxSize(size => ({ ...size, width: Number(e.target.value) }))
-            }
-          />
+    <div className="w-full space-y-6">
+      {/* テキスト入力エリア */}
+      <div>
+        <label htmlFor="memo-text" className="block font-bold text-xl mb-3">
+          今日やったこと
         </label>
-        <label className="flex items-center gap-2">
-          高さ:
-          <input
-            type="range"
-            min={50}
-            max={500}
-            value={textBoxSize.height}
-            onChange={e =>
-              setTextBoxSize(size => ({ ...size, height: Number(e.target.value) }))
-            }
-          />
+        <textarea
+          id="memo-text"
+          className="w-full border-2 border-gray-300 px-6 py-5 rounded-lg text-black bg-white placeholder:text-gray-400 min-h-64 resize-y text-lg leading-relaxed focus:border-blue-500 focus:outline-none"
+          value={text}
+          onChange={(e) => handleTextChange(e.target.value)}
+          placeholder="今日やったこと、学んだことを書いてください..."
+        />
+      </div>
+
+      {/* Canvas編集エリア */}
+      <div>
+        <label className="block font-bold text-xl mb-3">
+          プレビュー
         </label>
+        <div className="overflow-x-auto">
+          <canvas
+            ref={canvasRef}
+            onPointerDown={handlePointerDown}
+            onContextMenu={(e) => e.preventDefault()}
+            className="border-2 border-gray-300 max-w-full h-auto touch-none select-none rounded-lg mx-auto block"
+            style={{ width: '600px', maxWidth: '100%' }}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <label className="block font-bold text-xl mb-3">
+          テキストボックスのサイズ調整
+        </label>
+        <div className="space-y-4">
+          <div>
+            <label className="flex items-center gap-4 mb-2">
+              <span className="text-base font-medium w-16">幅:</span>
+              <input
+                type="range"
+                min={100}
+                max={600}
+                value={textBoxSize.width}
+                onChange={e =>
+                  setTextBoxSize(size => ({ ...size, width: Number(e.target.value) }))
+                }
+                className="flex-1 h-3 rounded-lg appearance-none cursor-pointer bg-gray-300"
+                style={{
+                  accentColor: '#3b82f6',
+                }}
+              />
+              <span className="text-base font-medium w-16 text-right">{textBoxSize.width}px</span>
+            </label>
+          </div>
+          <div>
+            <label className="flex items-center gap-4 mb-2">
+              <span className="text-base font-medium w-16">高さ:</span>
+              <input
+                type="range"
+                min={50}
+                max={800}
+                value={textBoxSize.height}
+                onChange={e =>
+                  setTextBoxSize(size => ({ ...size, height: Number(e.target.value) }))
+                }
+                className="flex-1 h-3 rounded-lg appearance-none cursor-pointer bg-gray-300"
+                style={{
+                  accentColor: '#3b82f6',
+                }}
+              />
+              <span className="text-base font-medium w-16 text-right">{textBoxSize.height}px</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <div className="text-center">
         <button
           onClick={handleDownload}
-          className="bg-black text-white px-4 py-2 rounded"
+          className="bg-gray-700 text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-800 transition"
         >
-          ダウンロード
+          画像をダウンロード
         </button>
       </div>
     </div>
   );
-}
+});
+
+export default FabricCanvasEditor;

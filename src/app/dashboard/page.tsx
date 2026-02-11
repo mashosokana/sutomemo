@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [totalPosts, setTotalPosts] = useState(0);
   const [recentPosts, setRecentPosts] = useState<PostType[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading && !session) {
@@ -41,36 +42,48 @@ export default function DashboardPage() {
     const fetchDashboardData = async () => {
       setLoadingData(true);
       try {
+        setLoadError(null);
         // 統計データを取得
         const statsRes = await fetch("/api/dashboard/stats", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
-        const statsData = await statsRes.json();
+        const statsData = await statsRes.json().catch(() => ({} as Record<string, unknown>));
 
-        if (statsRes.ok) {
-          setTotalPosts(statsData.totalPosts || 0);
+        if (!statsRes.ok) {
+          if (statsRes.status === 401 || statsRes.status === 403) {
+            router.replace("/login");
+            return;
+          }
+          throw new Error((statsData as { error?: string }).error || "統計データの取得に失敗しました");
         }
+        setTotalPosts(statsData.totalPosts || 0);
 
         // 最近の投稿3件を取得
         const postsRes = await fetch("/api/dashboard/recent-posts?limit=3", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
-        const postsData = await postsRes.json();
+        const postsData = await postsRes.json().catch(() => ({} as Record<string, unknown>));
 
-        if (postsRes.ok) {
-          setRecentPosts(postsData.posts || []);
+        if (!postsRes.ok) {
+          if (postsRes.status === 401 || postsRes.status === 403) {
+            router.replace("/login");
+            return;
+          }
+          throw new Error((postsData as { error?: string }).error || "最近の投稿の取得に失敗しました");
         }
+        setRecentPosts(postsData.posts || []);
       } catch (error) {
         console.error("Dashboard data fetch error:", error);
+        setLoadError(error instanceof Error ? error.message : "データ取得でエラーが発生しました");
       } finally {
         setLoadingData(false);
       }
     };
 
     fetchDashboardData();
-  }, [token]);
+  }, [token, router]);
 
   if (!isLoading && !session) {
     return <div className="p-4">ログインページへ移動します...</div>;
@@ -78,6 +91,9 @@ export default function DashboardPage() {
 
   if (loadingData) {
     return <div className="p-4">読み込み中...</div>;
+  }
+  if (loadError) {
+    return <div className="p-4 text-red-500">エラー: {loadError}</div>;
   }
 
   return (
@@ -132,7 +148,7 @@ export default function DashboardPage() {
           <div className="text-center py-8 text-gray-500 border border-gray-300 rounded-lg">
             <p>まだ投稿がありません</p>
             <Link
-              href="/compose/input"
+              href="/simple-memo"
               className="mt-4 inline-block px-6 py-2 bg-black text-white rounded-md hover:bg-gray-800 transition-colors"
             >
               最初の投稿を作成
@@ -142,24 +158,12 @@ export default function DashboardPage() {
       </div>
 
       {/* クイックアクション */}
-      <div className="mb-6 space-y-3">
+      <div className="mb-6">
         <Link
-          href="/ideas"
+          href="/simple-memo"
           className="block w-full bg-black text-white text-lg py-3 rounded-md font-bold text-center hover:bg-gray-800"
         >
-          次の投稿ネタを探す
-        </Link>
-        <Link
-          href="/compose/input"
-          className="block w-full bg-gray-200 text-gray-900 text-lg py-3 rounded-md font-bold text-center hover:bg-gray-300"
-        >
           新規作成
-        </Link>
-        <Link
-          href="/reels/new"
-          className="block w-full bg-white border border-gray-300 text-gray-900 text-lg py-3 rounded-md font-bold text-center hover:bg-gray-100"
-        >
-          かんたんリール
         </Link>
       </div>
     </main>

@@ -1,11 +1,10 @@
 // app/posts/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
-import PostCard from "./PostCard";
 
 type MemoType = {
   answerWhy: string;
@@ -13,20 +12,11 @@ type MemoType = {
   answerNext: string;
 };
 
-type ImageData = {
-  id: number;
-  imageKey: string;
-  signedUrl?: string; 
-};
-
 type PostType = {
   id: number;
   caption: string;
-  status?: string;
   memo: MemoType | null;
   createdAt: string;
-  imageUrl?: string;
-  images?: ImageData[];
 };
 
 type DeleteResponse = {
@@ -42,7 +32,6 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<PostType[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingPosts, setLoadingPosts] = useState<boolean>(true);
-  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!isLoading && !session) {
@@ -123,69 +112,6 @@ export default function DashboardPage() {
     [token, router]
   );
 
-  const handleStatusChange = useCallback(
-    async (postId: number, newStatus: string) => {
-      if (!token) return;
-
-      try {
-        const res = await fetch(`/api/posts/${postId}/status`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: newStatus }),
-          cache: "no-store",
-        });
-
-        const result = await res.json();
-        if (!res.ok) {
-          if (res.status === 401) {
-            router.replace("/login");
-            return;
-          }
-          throw new Error(result.error || "ステータス変更に失敗しました");
-        }
-
-        // ステータスを更新
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId ? { ...p, status: newStatus } : p
-          )
-        );
-      } catch (err: unknown) {
-        alert(err instanceof Error ? err.message : "不明なエラーが発生しました");
-      }
-    },
-    [token, router]
-  );
-
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-
-  const filteredPosts = useMemo(() => {
-    let filtered = posts;
-
-    // 検索クエリフィルタ
-    if (normalizedQuery) {
-      filtered = filtered.filter((post) => {
-        const text = [
-          post.caption ?? "",
-          post.memo?.answerWhy ?? "",
-          post.memo?.answerWhat ?? "",
-          post.memo?.answerNext ?? "",
-          new Date(post.createdAt).toLocaleDateString("ja-JP"),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-
-        return text.includes(normalizedQuery);
-      });
-    }
-
-    return filtered;
-  }, [posts, normalizedQuery]);
-
   if (!isLoading && !session) {
     return <div className="p-4">ログインページへ移動します...</div>;
   }
@@ -198,16 +124,6 @@ export default function DashboardPage() {
 
   return (
     <main className="max-w-3xl mx-auto p-6 bg-white min-h-screen">
-      <div className="mb-4 text-black">
-        <input
-          type="text"
-          placeholder="検索（日付や内容）"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-4 py-2 border rounded-md"
-        />
-      </div>
-
       <div className="mb-6">
         <Link
           href="/compose/input"
@@ -217,32 +133,41 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {filteredPosts.length === 0 ? (
+      {posts.length === 0 ? (
         <p className="text-gray-600">まだ投稿がありません</p>
       ) : (
         <ul className="space-y-4">
-          {filteredPosts.map((post) => {
-            const firstImageUrl =
-              post.imageUrl || post.images?.[0]?.signedUrl || undefined;
+          {posts.map((post) => {
+            const content = [
+              post.caption,
+              post.memo?.answerWhy,
+              post.memo?.answerWhat,
+              post.memo?.answerNext,
+            ]
+              .filter(Boolean)
+              .join("\n");
 
             return (
-              <li key={post.id} className="border-b pb-6">
-                <PostCard
-                  date={new Date(post.createdAt).toLocaleDateString("ja-JP")}
-                  status={post.status}
-                  content={[
-                    post.caption,
-                    post.memo?.answerWhy,
-                    post.memo?.answerWhat,
-                    post.memo?.answerNext,
-                  ]
-                    .filter(Boolean)
-                    .join("\n")}
-                  imageUrl={firstImageUrl}
-                  onEdit={() => router.push(`/posts/${post.id}`)}
-                  onDelete={() => handleDelete(post.id)}
-                  onStatusChange={(newStatus) => handleStatusChange(post.id, newStatus)}
-                />
+              <li key={post.id} className="border rounded-lg p-4 text-black">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-bold">
+                    {new Date(post.createdAt).toLocaleDateString("ja-JP")}
+                  </p>
+                  <div className="flex gap-3 text-sm">
+                    <Link href={`/posts/${post.id}`} className="text-gray-700 hover:underline">
+                      開く
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(post.id)}
+                      className="text-red-500 hover:underline"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+                <pre className="whitespace-pre-wrap text-sm text-gray-800">
+                  {content || "（内容なし）"}
+                </pre>
               </li>
             );
           })}

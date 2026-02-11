@@ -4,7 +4,6 @@
 
 import { useState } from "react";
 import MemberGateButton from "./MemberGateButton";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type MemoFormProps = {
   caption: string;
@@ -21,8 +20,6 @@ type MemoFormProps = {
   guestLabel?: string;
 };
 
-type GenState = { loading: boolean; posts: string[]; error?: string };
-
 export default function MemoForm(props: MemoFormProps) {
   const {
     caption, answerWhy, answerWhat, answerNext,
@@ -30,11 +27,7 @@ export default function MemoForm(props: MemoFormProps) {
     onSubmit, submitLabel, gate = true, guestLabel = "登録して書き出す",
   } = props;
 
-  const supabase = createClientComponentClient();
-
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [gen, setGen] = useState<GenState>({ loading: false, posts: [] });
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const handleSubmit = async (): Promise<void> => {
     setIsSubmitting(true);
@@ -43,85 +36,6 @@ export default function MemoForm(props: MemoFormProps) {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // ★ ここが「バズ用に整形（プレビュー）」の処理
-  const handleBuzzPreview = async (): Promise<void> => {
-    try {
-      if (gen.loading) return;
-      // 新しく生成を開始するので選択状態をリセット
-      setSelectedIdx(null);
-      setGen({ loading: true, posts: [] });
-
-      // Bearer必須：Supabaseのセッションからトークン取得
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      const token = data.session?.access_token;
-      if (!token) {
-        throw new Error("アクセストークンがありません。先にゲストログイン/ログインしてください。");
-      }
-
-      // 4つの回答＋captionを1つのメモにまとめる
-      const memoText = [
-        `やったこと/学んだこと:\n${caption}`,
-        `なぜメモしたのか:\n${answerWhy}`,
-        `何が起きた/どう感じたか:\n${answerWhat}`,
-        `次に何をする/教訓:\n${answerNext}`,
-      ].join("\n\n");
-
-      // 事前チェック（最低10文字程度）
-      if (memoText.replace(/\s+/g, "").length < 10) {
-        setGen({
-           loading: false,
-           posts: [],
-           error: "メモが短すぎます。もう少し内容を書いてから整形してください。",
-         });
-         return;
-       }
-
-      // 生成API呼び出し
-      const res = await fetch("/api/generate/social-post", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // ← 重要
-        },
-        body: JSON.stringify({ memo: memoText, platform: "x", variants: 2 }),
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        let msg = `HTTP ${res.status}`;
-        try {
-          const errJson = await res.json();
-          if (typeof errJson?.error === "string") msg = errJson.error;
-        } catch {
-          const text = await res.text();
-          if (text) msg = text;
-        }
-        throw new Error(msg);
-      }
-        
-        const json = await res.json();
-        const posts = Array.isArray(json?.posts) && json.posts.every((s: unknown) => typeof s === "string")
-          ? (json.posts as string[])
-          : [];
-        setGen({ loading: false, posts });
-        setSelectedIdx(null);
-    } catch (e) {
-      setGen({
-        loading: false,
-        posts: [],
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  };
-
-  // 生成案をcaptionに反映
-  const adoptToCaption = (text: string, index: number) => {
-    onCaptionChange(text);
-    setSelectedIdx(index);
-    // 必要ならスクロールや通知などを追加
   };
 
   const boxClass =
@@ -180,63 +94,6 @@ export default function MemoForm(props: MemoFormProps) {
           disabled={isSubmitting}
           placeholder="次の一手・教訓"
         />
-      </div>
-
-      {/* ▼ ここが新規追加：バズ整形UI */}
-      <div className="rounded border p-3 space-y-3">
-        <p className="text-sm text-gray-600 text-center">
-          入力したメモをX/Threads用の投稿文に最適化します
-        </p>
-        <div className="flex items-center gap-4 justify-center">
-
-          <button
-            onClick={handleBuzzPreview}
-            disabled={gen.loading}
-            className="min-w-[300px] bg-black text-white px-4 py-2 rounded hover:opacity-80 transition"
-          >
-            {gen.loading ? "生成中…" : "このメモをバズる投稿文にする"}
-          </button>
-        </div>
-
-        {gen.error && <p className="text-red-600 text-sm">{gen.error}</p>}
-
-        {gen.posts.length > 0 && (
-          <div className="grid gap-3">
-            {gen.posts.map((p, i) => {
-              const isSelected = selectedIdx === i;
-              const cardClass = isSelected
-                ? "rounded border p-3 bg-blue-50 border-blue-500 ring-1 ring-blue-400"
-                : "rounded border p-3 bg-gray-50";
-              return (
-                <div key={i} className={cardClass}>
-                  <div className="flex items-center gap-2 opacity-70 text-xs mb-2">
-                    <span>案 {i + 1}</span>
-                    {isSelected && (
-                      <span className="inline-flex items-center gap-1 text-blue-700 font-medium">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-600" />
-                        選択中
-                      </span>
-                    )}
-                  </div>
-                  <pre className="whitespace-pre-wrap leading-relaxed">{p}</pre>
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() => adoptToCaption(p, i)}
-                      className={
-                        isSelected
-                          ? "bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm cursor-default"
-                          : "bg-black text-white px-3 py-1 rounded text-sm hover:opacity-80"
-                      }
-                      disabled={isSelected}
-                    >
-                      {isSelected ? "文章に反映済み" : "この文章を選択"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ▼ 既存：保存/ゲート */}
