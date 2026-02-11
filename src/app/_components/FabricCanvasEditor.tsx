@@ -157,12 +157,52 @@ const FabricCanvasEditor = forwardRef<FabricCanvasEditorRef, Props>(
     getText: () => text,
   }));
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!canvasRef.current) return;
-    const link = document.createElement('a');
-    link.download = 'memo-image.png';
-    link.href = canvasRef.current.toDataURL('image/png');
-    link.click();
+
+    try {
+      // Canvas から Blob を取得
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvasRef.current?.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/png');
+      });
+
+      if (!blob) {
+        alert('画像の生成に失敗しました');
+        return;
+      }
+
+      // Web Share API をサポートしているか確認（スマホで写真として保存可能）
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], 'memo-image.png', { type: 'image/png' });
+        const shareData = { files: [file] };
+
+        // 共有可能かチェック
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // フォールバック: 従来のダウンロード方法
+      const link = document.createElement('a');
+      link.download = 'memo-image.png';
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      // ユーザーが共有をキャンセルした場合は何もしない
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      console.error('保存エラー:', err);
+      // フォールバック
+      const link = document.createElement('a');
+      link.download = 'memo-image.png';
+      link.href = canvasRef.current.toDataURL('image/png');
+      link.click();
+    }
   };
 
   return (

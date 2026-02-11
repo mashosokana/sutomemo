@@ -115,17 +115,50 @@ ${textData.tags.join(' ')}
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!videoResult) return;
 
     const ext = mimeTypeToExtension(videoResult.mimeType);
+    const fileName = `reel_${postLocalId}.${ext}`;
 
-    const a = document.createElement('a');
-    a.href = videoResult.url;
-    a.download = `reel_${postLocalId}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+      // Blob を取得（videoResult.url は既に Blob URL）
+      const response = await fetch(videoResult.url);
+      const blob = await response.blob();
+
+      // Web Share API をサポートしているか確認（スマホで写真/ビデオとして保存可能）
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], fileName, { type: videoResult.mimeType });
+        const shareData = { files: [file] };
+
+        // 共有可能かチェック
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // フォールバック: 従来のダウンロード方法
+      const a = document.createElement('a');
+      a.href = videoResult.url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      // ユーザーが共有をキャンセルした場合は何もしない
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      console.error('保存エラー:', err);
+      // フォールバック
+      const a = document.createElement('a');
+      a.href = videoResult.url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   const handleCopyCaption = () => {
