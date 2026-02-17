@@ -111,6 +111,12 @@ export default function SignUpPage() {
             {loading ? '登録中...' : '登録'}
           </button>
 
+          <ul className='text-xs text-gray-500 space-y-1'>
+            <li>・無料でご利用いただけます</li>
+            <li>・投稿データはあなただけのもの（非公開）</li>
+            <li>・アカウントはいつでも削除できます</li>
+          </ul>
+
           <div id='password-note' className='text-sm text-gray-600 mt-4'>
             <p className='font-semibold text-gray-800 mb-1'>注意</p>
             <ul className='list-disc list-inside space-y-1'>

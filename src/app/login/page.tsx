@@ -6,9 +6,30 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useSupabaseSession } from '@/app/hooks/useSupabaseSession';
 
+function LoginSkeleton() {
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 space-y-5">
+        <div className="h-8 bg-gray-200 rounded w-32 mx-auto animate-pulse" />
+        <div className="space-y-5">
+          <div>
+            <div className="h-4 bg-gray-200 rounded w-28 mb-2 animate-pulse" />
+            <div className="h-10 bg-gray-200 rounded-lg animate-pulse" />
+          </div>
+          <div>
+            <div className="h-4 bg-gray-200 rounded w-24 mb-2 animate-pulse" />
+            <div className="h-10 bg-gray-200 rounded-lg animate-pulse" />
+          </div>
+          <div className="h-11 bg-gray-200 rounded-lg animate-pulse" />
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<LoginSkeleton />}>
       <LoginForm />
     </Suspense>
   );
@@ -25,6 +46,14 @@ function LoginForm() {
 
   // 既ログインなら自動遷移（他ページのガードと整合）
   const { token, isLoading } = useSupabaseSession();
+  const [slowLoading, setSlowLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => setSlowLoading(true), 5000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
+
   useEffect(() => {
     if (isLoading) return;
     if (token) {
@@ -96,6 +125,12 @@ function LoginForm() {
               autoComplete="current-password"
             />
           </div>
+
+          {slowLoading && (
+            <p className="text-amber-600 text-sm text-center">
+              読み込みに時間がかかっています。ページを再読み込みしてください。
+            </p>
+          )}
 
           {errorMessage && (
             <p className="text-red-500 text-sm text-center">{errorMessage}</p>

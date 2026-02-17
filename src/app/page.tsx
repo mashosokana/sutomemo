@@ -150,6 +150,13 @@ export default function Home() {
           </p>
         </div>
 
+        {/* 安心材料 */}
+        <ul className="text-xs text-gray-500 space-y-1 mt-4">
+          <li>・無料でご利用いただけます</li>
+          <li>・投稿データはあなただけのもの（非公開）</li>
+          <li>・アカウントはいつでも削除できます</li>
+        </ul>
+
         {/* 既存ボタン（お試しログイン） */}
         <div className="space-y-3 mt-4">
           <Link href="/signup">

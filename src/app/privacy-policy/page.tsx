@@ -42,7 +42,13 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-lg font-bold">3. 第三者提供・委託</h2>
         <p>
           本サービスは、データの保管・認証・生成機能の提供等のために、外部サービス事業者
-          （例: クラウド基盤、認証サービス、生成API）に業務を委託する場合があります。
+          に業務を委託する場合があります。現在利用している主な外部サービスは以下のとおりです。
+        </p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>Supabase（認証・データベース・ストレージ）</li>
+          <li>Vercel（ホスティング・配信）</li>
+        </ul>
+        <p>
           この場合、委託先と適切な契約を締結し、個人情報の安全管理を徹底します。
         </p>
       </section>
@@ -59,7 +65,11 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-lg font-bold">5. ユーザーの権利</h2>
         <p>
           ユーザーは、ご自身の情報の開示・訂正・削除等を求めることができます。
-          ご希望の場合は、運営者の指定する連絡手段にてご連絡ください。
+          ご希望の場合は、下記「お問い合わせ」に記載の連絡先までご連絡ください。
+        </p>
+        <p>
+          アカウントおよびデータの削除をご希望の場合は、運営者へメールにてご連絡ください。
+          確認後、速やかに対応いたします。
         </p>
       </section>
 
@@ -77,6 +87,14 @@ export default function PrivacyPolicyPage() {
           本ポリシーは、必要に応じて改定される場合があります。重要な変更がある場合は、
           本サービス上でお知らせします。
         </p>
+      </section>
+
+      <section className="space-y-2 text-sm leading-relaxed">
+        <h2 className="text-lg font-bold">8. お問い合わせ</h2>
+        <p>
+          本ポリシーに関するお問い合わせは、以下の連絡先までお願いいたします。
+        </p>
+        <p>メール: gunji.mamoru@gmail.com</p>
       </section>
     </main>
   );

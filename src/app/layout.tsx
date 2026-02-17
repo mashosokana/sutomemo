@@ -23,9 +23,12 @@ export default function RootLayout({
         <div className="w-[393px] min-h-screen bg-black flex flex-col">
             <Header />
           <main className="flex-1 pb-8">{children}</main>
-          <footer className="px-4 pb-6 text-center text-xs text-gray-400">
+          <footer className="px-4 pb-6 text-center text-xs text-gray-400 space-x-3">
             <Link href="/privacy-policy" className="underline underline-offset-2 hover:text-gray-200">
               プライバシーポリシー
+            </Link>
+            <Link href="/terms" className="underline underline-offset-2 hover:text-gray-200">
+              利用規約
             </Link>
           </footer>
         </div>
