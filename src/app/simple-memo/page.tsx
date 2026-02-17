@@ -3,26 +3,23 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSupabaseSession } from "../hooks/useSupabaseSession";
-import FabricCanvasEditor, { FabricCanvasEditorRef } from "../_components/FabricCanvasEditor";
+import StoriesStyleEditor, { StoriesStyleEditorRef } from "../_components/StoriesStyleEditor";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faXTwitter, faThreads } from '@fortawesome/free-brands-svg-icons';
+
+type SavedPost = {
+  id: number;
+  caption: string;
+  imageUrl: string;
+};
 
 export default function SimpleMemoPage() {
   const { session, token, isLoading } = useSupabaseSession();
   const router = useRouter();
+  const editorRef = useRef<StoriesStyleEditorRef>(null);
 
-  // メモ入力
-  const [todayActivity, setTodayActivity] = useState("");
-
-  // 画像関連
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const canvasRef = useRef<FabricCanvasEditorRef>(null);
-
-  // メトリクス
-  const [totalPosts, setTotalPosts] = useState(0);
-  const [weekPosts, setWeekPosts] = useState(0);
+  const [savedPost, setSavedPost] = useState<SavedPost | null>(null);
 
   // 認証チェック
   useEffect(() => {
@@ -31,105 +28,10 @@ export default function SimpleMemoPage() {
     }
   }, [isLoading, session, router]);
 
-  // データ取得
-  useEffect(() => {
-    if (!token) return;
-
-    const fetchData = async () => {
-      try {
-        // 統計データ取得
-        const statsRes = await fetch("/api/dashboard/stats", {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setTotalPosts(statsData.totalPosts || 0);
-          setWeekPosts(statsData.weekPosts || 0);
-        }
-      } catch (error) {
-        console.error("Data fetch error:", error);
-      }
-    };
-
-    fetchData();
-  }, [token]);
-
-  // データ再取得
-  const refreshData = async () => {
-    if (!token) return;
-    try {
-      // 統計データ取得
-      const statsRes = await fetch("/api/dashboard/stats", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setTotalPosts(statsData.totalPosts || 0);
-        setWeekPosts(statsData.weekPosts || 0);
-      }
-    } catch (error) {
-      console.error("Data refresh error:", error);
-    }
-  };
-
-  // 画像アップロード処理
-  const processFile = async (file: File) => {
-    setIsUploading(true);
-    try {
-      const localUrl = URL.createObjectURL(file);
-      setUploadedImageUrl(localUrl);
-    } catch (error) {
-      console.error("Image upload error:", error);
-      alert("画像のアップロードに失敗しました");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  // 画像アップロード（input）
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await processFile(file);
-  };
-
-  // ドラッグ&ドロップ処理
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      alert("画像ファイルをアップロードしてください");
-      return;
-    }
-
-    await processFile(file);
-  };
-
   // 保存処理
   const handleSave = async () => {
-    if (!todayActivity.trim()) {
-      alert("「今日やったこと」を入力してください");
-      return;
-    }
-
-    if (!uploadedImageUrl || !canvasRef.current) {
-      alert("画像をアップロードしてください");
+    if (!editorRef.current) {
+      alert("エディターの初期化に失敗しました");
       return;
     }
 
@@ -140,7 +42,16 @@ export default function SimpleMemoPage() {
 
     setIsSaving(true);
     try {
-      // 1. 投稿を作成
+      // 1. Canvas Blobを取得
+      const blob = await editorRef.current.getCanvasBlob();
+      if (!blob) {
+        throw new Error("画像の生成に失敗しました");
+      }
+
+      // 2. テキストを取得
+      const text = editorRef.current.getAllText();
+
+      // 3. 投稿を作成
       const postRes = await fetch("/api/posts", {
         method: "POST",
         headers: {
@@ -148,7 +59,7 @@ export default function SimpleMemoPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          caption: todayActivity,
+          caption: text || "",
         }),
       });
 
@@ -160,18 +71,12 @@ export default function SimpleMemoPage() {
       const { post } = await postRes.json();
       const postId = post.id;
 
-      // 2. canvasから画像Blobを取得
-      const blob = await canvasRef.current.getCanvasBlob();
-      if (!blob) {
-        throw new Error("画像の生成に失敗しました");
-      }
-
-      // 3. BlobをFileに変換
+      // 4. BlobをFileに変換
       const file = new File([blob], `memo-${Date.now()}.png`, {
         type: "image/png",
       });
 
-      // 4. 画像をアップロード
+      // 5. 画像をアップロード
       const formData = new FormData();
       formData.append("file", file);
 
@@ -188,11 +93,18 @@ export default function SimpleMemoPage() {
         throw new Error(errorData.error || "画像のアップロードに失敗しました");
       }
 
-      // 5. 成功フラグを立てる
-      setSaveSuccess(true);
+      const imageData = await imageRes.json();
+      const imageUrl = imageData.signedUrl || '';
 
-      // 6. データを再取得
-      await refreshData();
+      // 6. 保存成功 - プレビューモードに切り替え
+      setSavedPost({
+        id: postId,
+        caption: text || "",
+        imageUrl: imageUrl,
+      });
+
+      // 7. localStorage をクリア
+      localStorage.removeItem('stories-editor-state:v1');
     } catch (error) {
       console.error("Save error:", error);
       alert(error instanceof Error ? error.message : "保存に失敗しました");
@@ -201,162 +113,203 @@ export default function SimpleMemoPage() {
     }
   };
 
-  // もう1つ作る
-  const handleCreateAnother = () => {
-    setTodayActivity("");
-    setUploadedImageUrl(null);
-    setSaveSuccess(false);
+  // キャンセル処理
+  const handleCancel = () => {
+    const confirmed = confirm("編集内容が失われますが、よろしいですか？");
+    if (confirmed) {
+      // localStorageをクリア
+      localStorage.removeItem('stories-editor-state:v1');
+      router.push("/dashboard");
+    }
+  };
+
+  // ダウンロード処理
+  const handleDownload = async () => {
+    if (!savedPost?.imageUrl) return;
+
+    try {
+      const response = await fetch(savedPost.imageUrl);
+      const blob = await response.blob();
+
+      if (navigator.share && navigator.canShare) {
+        const file = new File([blob], 'memo.png', { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          return;
+        }
+      }
+
+      const link = document.createElement('a');
+      link.download = `memo-${savedPost.id}.png`;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('ダウンロードに失敗しました');
+    }
+  };
+
+  // シェア処理
+  const handleShare = (platform: 'x' | 'threads') => {
+    if (!savedPost) return;
+
+    const text = savedPost.caption.slice(0, platform === 'x' ? 280 : 500);
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const combined = url ? `${text}\n\n${url}` : text;
+
+    if (platform === 'x') {
+      window.open(
+        `https://twitter.com/intent/tweet?text=${encodeURIComponent(combined)}`,
+        '_blank'
+      );
+    } else {
+      const params = new URLSearchParams({ text: combined });
+      window.open(`https://www.threads.net/intent/post?${params.toString()}`, '_blank');
+    }
+  };
+
+  // 削除処理
+  const handleDelete = async () => {
+    if (!savedPost || !token) return;
+    if (!confirm('この投稿を削除しますか？')) return;
+
+    try {
+      const res = await fetch(`/api/posts/${savedPost.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error('削除に失敗しました');
+      }
+
+      alert('削除しました');
+      router.push('/posts');
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
+  // 新規作成
+  const handleCreateNew = () => {
+    setSavedPost(null);
+    localStorage.removeItem('stories-editor-state:v1');
   };
 
   if (isLoading) {
-    return <div className="p-4">読み込み中...</div>;
+    return (
+      <div className="max-w-3xl mx-auto p-6 bg-white min-h-screen flex items-center justify-center">
+        <p className="text-gray-900 text-lg">読み込み中...</p>
+      </div>
+    );
   }
 
   if (!session) {
     return null;
   }
 
-  // 保存成功画面
-  if (saveSuccess) {
+  // 保存後のプレビュー表示
+  if (savedPost) {
     return (
-      <main className="max-w-5xl mx-auto p-4 md:p-6 bg-white min-h-screen">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-          <div className="text-center">
-            <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">保存完了！</h2>
-            <p className="text-lg text-gray-600">メモを保存しました</p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-            <button
-              onClick={handleCreateAnother}
-              className="flex-1 bg-black text-white py-4 rounded-lg font-bold text-lg hover:bg-gray-800 transition"
-            >
-              もう1つ作る
-            </button>
-            <button
-              onClick={() => router.push("/posts")}
-              className="flex-1 bg-gray-200 text-gray-800 py-4 rounded-lg font-bold text-lg hover:bg-gray-300 transition"
-            >
-              一覧を見る
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="max-w-5xl mx-auto p-4 md:p-6 bg-white min-h-screen">
-      {/* ヘッダー */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-            画像メモ作成
-          </h1>
-          <p className="text-gray-600 mt-1">画像を選んで、テキストを追加しよう</p>
-        </div>
-        <div className="flex gap-4">
-          <div className="text-center">
-            <p className="text-xs text-gray-500">総メモ数</p>
-            <p className="text-2xl font-bold text-gray-900">{totalPosts}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-gray-500">今週</p>
-            <p className="text-2xl font-bold text-green-600">{weekPosts}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-8">
-        {/* ステップ1: 画像アップロード */}
-        <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
-              1
-            </span>
-            <label className="font-bold text-xl">画像を選択</label>
-          </div>
-
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`relative border-4 border-dashed rounded-lg p-12 text-center transition ${
-              isDragging
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-300 bg-gray-50"
-            }`}
+      <div className="max-w-3xl mx-auto p-6 bg-white min-h-screen">
+        {/* ヘッダー */}
+        <div className="mb-6">
+          <button
+            onClick={() => router.push('/posts')}
+            className="text-gray-700 hover:text-gray-900 mb-4 flex items-center gap-2"
           >
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              disabled={isUploading}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              id="image-upload"
-            />
-            <div className="pointer-events-none">
-              <div className="text-6xl mb-4">📷</div>
-              <p className="text-xl font-semibold text-gray-700 mb-2">
-                {isDragging ? "ここにドロップ" : "画像を選択"}
-              </p>
-              <p className="text-base text-gray-500">
-                クリックまたはドラッグ＆ドロップ
-              </p>
-            </div>
-          </div>
-
-          {isUploading && (
-            <p className="mt-3 text-center text-base text-blue-600">
-              アップロード中...
-            </p>
-          )}
-          {uploadedImageUrl && (
-            <p className="mt-3 text-center text-base text-green-600 font-semibold">
-              ✓ 画像を読み込みました
-            </p>
-          )}
+            ← 投稿一覧に戻る
+          </button>
         </div>
 
-        {/* ステップ2: テキスト入力と編集 */}
-        {uploadedImageUrl && (
-          <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
-                2
-              </span>
-              <h2 className="font-bold text-xl">テキスト入力とレイアウト調整</h2>
+        {/* 画像表示 */}
+        <div className="mb-6 rounded-lg overflow-hidden border border-gray-200 bg-black w-full" style={{ aspectRatio: '9/16' }}>
+          <img
+            src={savedPost.imageUrl}
+            alt={savedPost.caption || 'メモ画像'}
+            className="w-full h-full object-contain"
+          />
+        </div>
+
+        {/* キャプション */}
+        {savedPost.caption && (
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">キャプション</h2>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-gray-900 whitespace-pre-wrap">{savedPost.caption}</p>
             </div>
-            <p className="text-gray-600 mb-6 text-base">
-              テキストを入力し、白いボックスをドラッグして位置を調整できます。スライダーでサイズも変更できます。
-            </p>
-            <FabricCanvasEditor
-              ref={canvasRef}
-              imageUrl={uploadedImageUrl}
-              initialText={todayActivity}
-              onTextChange={setTodayActivity}
-            />
           </div>
         )}
 
-        {/* ステップ3: 保存 */}
-        <div className="bg-white rounded-lg p-8 border-2 border-gray-300">
-          <div className="flex items-center gap-3 mb-6">
-            <span className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold">
-              3
-            </span>
-            <h2 className="font-bold text-xl">保存</h2>
-          </div>
+        {/* アクション */}
+        <div className="space-y-3">
           <button
-            onClick={handleSave}
-            disabled={isSaving || !todayActivity.trim() || !uploadedImageUrl}
-            className="w-full bg-black text-white py-6 rounded-lg font-bold text-2xl hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleCreateNew}
+            className="w-full bg-blue-600 text-white py-3 rounded-md font-bold hover:bg-blue-700 transition"
           >
-            {isSaving ? "保存中..." : "保存する"}
+            新しいメモを作成
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="w-full bg-black text-white py-3 rounded-md font-bold hover:bg-gray-800 transition"
+          >
+            ダウンロード
+          </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleShare('x')}
+              className="bg-gray-100 text-gray-900 py-3 rounded-md font-medium hover:bg-gray-200 transition flex items-center justify-center gap-2"
+            >
+              <FontAwesomeIcon icon={faXTwitter} />
+              X
+            </button>
+            <button
+              onClick={() => handleShare('threads')}
+              className="bg-gray-100 text-gray-900 py-3 rounded-md font-medium hover:bg-gray-200 transition flex items-center justify-center gap-2"
+            >
+              <FontAwesomeIcon icon={faThreads} />
+              Threads
+            </button>
+          </div>
+
+          <button
+            onClick={handleDelete}
+            className="w-full bg-red-600 text-white py-3 rounded-md font-medium hover:bg-red-700 transition"
+          >
+            削除
           </button>
         </div>
       </div>
-    </main>
+    );
+  }
+
+  // 編集モード
+  return (
+    <div className="max-w-3xl mx-auto p-6 bg-white min-h-screen">
+      {/* ページタイトル */}
+      <div className="mb-6">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="text-gray-700 hover:text-gray-900 mb-2 flex items-center gap-2"
+        >
+          ← ダッシュボードに戻る
+        </button>
+        <h1 className="text-2xl font-bold text-gray-900">新規メモ作成</h1>
+      </div>
+
+      {/* エディターエリア（9:16のアスペクト比） */}
+      <div className="bg-black rounded-lg overflow-hidden w-full" style={{ aspectRatio: '9/16' }}>
+        <StoriesStyleEditor
+          ref={editorRef}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          isSaving={isSaving}
+        />
+      </div>
+    </div>
   );
 }

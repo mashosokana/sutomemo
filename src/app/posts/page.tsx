@@ -126,7 +126,7 @@ export default function DashboardPage() {
     <main className="max-w-3xl mx-auto p-6 bg-white min-h-screen">
       <div className="mb-6">
         <Link
-          href="/compose/input"
+          href="/simple-memo"
           className="block w-full bg-black text-white text-lg py-3 rounded-md font-bold text-center hover:bg-gray-800"
         >
           新規作成

@@ -71,7 +71,7 @@ export default function Home() {
 
         {/* サブキャッチ */}
         <p className="text-center text-gray-700 text-sm">
-          わずか3ステップで画像メモが完成！
+          直感的な操作で画像メモが完成！
         </p>
 
         {/* 実績バッジ */}
@@ -81,9 +81,9 @@ export default function Home() {
           </p>
         </div>
 
-        {/* 3ステップ表示 */}
+        {/* 操作手順 */}
         <div className="bg-[#FFF5E6] p-6 rounded-lg border-2 border-[#E8D5C4]">
-          <h3 className="text-center font-bold text-lg mb-6 text-gray-800">シンプルな3ステップ</h3>
+          <h3 className="text-center font-bold text-lg mb-6 text-gray-800">シンプルな操作</h3>
           <div className="space-y-4">
             <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border border-[#E8D5C4]">
               <div className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center text-white text-2xl font-bold">
@@ -101,7 +101,7 @@ export default function Home() {
               </div>
               <div className="flex-1">
                 <p className="font-bold text-gray-800 mb-1">✍️ テキスト入力と配置調整</p>
-                <p className="text-xs text-gray-600">ドラッグで位置、スライダーでサイズ変更</p>
+                <p className="text-xs text-gray-600">タップで追加、ドラッグで移動、ピンチで拡大縮小</p>
               </div>
             </div>
 
@@ -126,7 +126,7 @@ export default function Home() {
                 このアプリは、あなたの日々の学びや気づきを画像メモとして簡単に記録・共有できるツールです。
               </p>
               <p>
-                シンプルな3ステップで、リール動画用の画像メモを作成。画像を選んで、テキストを書いて、位置を調整するだけ。
+                直感的な操作で、リール動画用の画像メモを作成。画像を選んで、タップしてテキストを追加、ドラッグで配置するだけ。
               </p>
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function Home() {
               そんな経験ありませんか？SutoMemoは、考える前に<span className="font-bold text-gray-800">&ldquo;作れる&rdquo;</span>習慣をつくります。
             </p>
             <p>
-              画像を見ながらテキストを書けるから、自然と言葉が出てくる。ドラッグで位置を調整、スライダーでサイズ変更。直感的な操作で誰でも使えます。
+              画像を見ながらテキストを書けるから、自然と言葉が出てくる。タップでテキストを追加、ドラッグで移動、ピンチで拡大縮小。直感的な操作で誰でも使えます。
             </p>
           </div>
 
@@ -233,7 +233,7 @@ export default function Home() {
 
           <div className="bg-[#FFF5E6] p-5 rounded-lg text-center border-2 border-[#E8D5C4]">
             <p className="font-bold text-gray-800 mb-2">
-              \シンプルな3ステップで投稿できる自分へ/
+              \シンプルな操作で投稿できる自分へ/
             </p>
             <p>
               今すぐ使って、<br />
