@@ -21,23 +21,6 @@
 
 ---
 
-## スクリーンショット
-
-<table>
-  <tr>
-    <th>トップ(LP)</th>
-    <th>ダッシュボード</th>
-    <th>画像オーバーレイ</th>
-  </tr>
-  <tr>
-    <td><img src="docs/img/lp.png" alt="LP" width="320"></td>
-    <td><img src="docs/img/dashboard.png" alt="Dashboard" width="320"></td>
-    <td><img src="docs/img/overlay2.png" alt="Overlay" width="320"></td>
-  </tr>
-</table>
-
----
-
 ## 機能一覧
 
 | 機能 | 説明 |
