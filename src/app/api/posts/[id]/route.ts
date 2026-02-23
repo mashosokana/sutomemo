@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { Prisma, Image as DbImage } from "@prisma/client";
 import { IMAGE_BUCKET } from "@/lib/buckets";
-import { verifyUser } from "@/lib/auth";
+import { isAdmin, isGuest, verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -22,12 +22,6 @@ function parsePostId(params: { id: string }) {
 const isNonHeic = (key: string) => !/\.hei(c|f)$/i.test(key);
 const nonEmpty = (v?: string | null) => (v && v.trim() !== "" ? v : undefined);
 
-function isGuestEmail(email?: string | null): boolean {
-  const a = (email ?? "").trim().toLowerCase();
-  const b = (process.env.GUEST_USER_EMAIL ?? process.env.NEXT_PUBLIC_GUEST_USER_EMAIL ?? "").trim().toLowerCase();
-  return a !== "" && a === b;
-}
-
 // -------- GET --------
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -37,8 +31,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const { postId, error: idError } = parsePostId(params);
     if (!postId) return jsonNoStore({ error: idError }, { status: 400 });
 
-    const where: Prisma.PostWhereInput =
-    user.role === "ADMIN" ? { id: postId } : { id: postId, userId: user.id };
+    const where: Prisma.PostWhereInput = isAdmin(user)
+      ? { id: postId }
+      : { id: postId, userId: user.id };
 
     const post = await prisma.post.findFirst({
       where,
@@ -98,7 +93,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       select: { id: true, userId: true },
     });
     if (!target) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
-    if (user.role !== "ADMIN" && target.userId !== user.id) {
+    if (!isAdmin(user) && target.userId !== user.id) {
       return jsonNoStore({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -150,11 +145,11 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       include: { images: true },
     });
     if (!target) return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
-    if (user.role !== "ADMIN" && isGuestEmail(user.email)) {
+    if (!isAdmin(user) && isGuest(user)) {
       return jsonNoStore({ error: "お試しログインでは削除できません" }, { status: 403 });
     }
 
-    if (user.role !== "ADMIN" && target.userId !== user.id) {
+    if (!isAdmin(user) && target.userId !== user.id) {
       return jsonNoStore({ error: "Forbidden" }, { status: 403 });
     }
 

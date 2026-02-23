@@ -1,17 +1,10 @@
 // src/app/api/posts/route.ts
 import { prisma } from "@/lib/prisma";
-import { verifyUser } from "@/lib/auth";
+import { isGuest, verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isGuestEmail(email?: string | null): boolean {
-  const a = (email ?? "").trim().toLowerCase();
-  const b = (process.env.GUEST_USER_EMAIL ?? "").trim().toLowerCase();
-  return a !== "" && a === b;
-}
-
 
 export async function POST(req: Request) {
   try {
@@ -20,7 +13,7 @@ export async function POST(req: Request) {
     if (!user) return jsonNoStore({ error }, { status });
 
 
-    if (isGuestEmail(user.email)) {
+    if (isGuest(user)) {
       return jsonNoStore({ error: "ゲストユーザーは新規作成できません。会員登録すると投稿できます。" }, { status: 403 });
     }
 

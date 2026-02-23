@@ -1,4 +1,4 @@
-name: E2E (prod smoke)
+name: E2E (prod)
 on: [push, pull_request]
 
 jobs:
@@ -7,8 +7,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm i -D @playwright/test
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - run: npx playwright install --with-deps
-      - name: Run smoke test on prod
-        run: BASE_URL=https://sutomemo.vercel.app npx playwright test e2e/smoke.spec.ts
+      - name: Run e2e tests on prod
+        run: BASE_URL=https://sutomemo.vercel.app npx playwright test --reporter=line --workers=1
