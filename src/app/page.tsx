@@ -12,6 +12,11 @@ export default function Home() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  const primaryButton =
+    'w-full rounded-xl bg-[#1f2937] py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#111827] disabled:opacity-50';
+  const secondaryButton =
+    'w-full rounded-xl border border-[#E8D5C4] bg-white py-3 text-sm font-semibold text-zinc-800 transition-colors hover:bg-[#FFF5E6] disabled:opacity-50';
+
   const handleGuestLogin = async () => {
     if (loading) return;
     try {
@@ -49,80 +54,95 @@ export default function Home() {
   };
 
   return (
-    <main className="bg-white text-black w-[393px] px-6 space-y-6">
-      <div className="bg-white text-black w-full max-w-md px-6 py-6 space-y-6">
-        {/* ヘッダー */}
-        <div className="flex justify-between items-start">
-          <div className="flex-1 pr-4">
-            <p className="text-red-500 font-bold text-[20px]">「何か残したい」けど</p>
-            <p className="text-sm mt-1 leading-relaxed text-[20px]">「どう伝えればいいかわからない」</p>
+    <main className="w-full bg-gradient-to-b from-[#FFFCF7] via-[#FFF8EF] to-[#FFF3E3] text-zinc-900">
+      <div className="mx-auto w-full max-w-2xl px-5 py-8">
+        <section className="space-y-8">
+          <div className="flex !flex-col gap-6">
+            <div className="space-y-3 border-l-4 border-[#E8D5C4] pl-4">
+              <p className="text-3xl font-bold leading-tight tracking-tight text-zinc-900">
+                「何か残したい」けど
+              </p>
+              <p className="text-lg font-medium leading-relaxed text-zinc-700">
+                「どう伝えればいいかわからない」
+              </p>
+            </div>
+            <div className="relative h-56 overflow-hidden rounded-3xl shadow-sm ring-1 ring-[#E8D5C4]">
+              <Image
+                src="/icons/26465757.jpg"
+                alt="悩んでいる人"
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 288px"
+                className="object-cover"
+              />
+            </div>
+            <p className="text-sm leading-relaxed text-zinc-600">
+              画像を見ながら言葉を置くだけ。SutoMemoは、続けやすい投稿体験を作るためのシンプルなメモツールです。
+            </p>
           </div>
-          <div className="relative w-[134px] h-[100px] flex-shrink-0">
-            <Image
-              src="/icons/26465757.jpg"
-              alt="悩んでいる人"
-              fill
-              priority
-              sizes="134px"
-              className="object-contain"
-            />
-          </div>
-        </div>
 
-        {/* サブキャッチ */}
-        <p className="text-center text-gray-700 text-sm">
-          直感的な操作で画像メモが完成！
-        </p>
-
-        {/* 実績バッジ */}
-        <div className="bg-[#FFF5E6] p-4 rounded-lg text-center border-2 border-[#E8D5C4]">
-          <p className="text-sm font-bold text-gray-800">
-            ✨ ユーザーの投稿が11,000回以上閲覧されました ✨
+          <p className="text-center text-xs font-medium tracking-wide text-[#8B5E3C]">
+            ユーザーの投稿が11,000回以上閲覧されました
           </p>
-        </div>
 
-        {/* 操作手順 */}
-        <div className="bg-[#FFF5E6] p-6 rounded-lg border-2 border-[#E8D5C4]">
-          <h3 className="text-center font-bold text-lg mb-6 text-gray-800">シンプルな操作</h3>
-          <div className="space-y-4">
-            <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border border-[#E8D5C4]">
-              <div className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                1
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-800 mb-1">📷 画像を選択</p>
-                <p className="text-xs text-gray-600">クリックまたはドラッグ&ドロップ</p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border border-[#E8D5C4]">
-              <div className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                2
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-800 mb-1">✍️ テキスト入力と配置調整</p>
-                <p className="text-xs text-gray-600">タップで追加、ドラッグで移動、ピンチで拡大縮小</p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-4 bg-white p-4 rounded-lg border border-[#E8D5C4]">
-              <div className="flex-shrink-0 w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                3
-              </div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-800 mb-1">💾 保存して共有</p>
-                <p className="text-xs text-gray-600">SNSでシェアまたはダウンロード</p>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 gap-3">
+            <Link href="/signup">
+              <button className={primaryButton}>ユーザー登録</button>
+            </Link>
+            <button
+              onClick={handleGuestLogin}
+              className={secondaryButton}
+              disabled={loading}
+            >
+              {loading ? 'ログイン中…' : 'お試しログイン'}
+            </button>
           </div>
-        </div>
+        </section>
 
-        {/* メインコピー */}
-        <section className="space-y-4 text-sm leading-relaxed text-gray-800">
-          <div className="flex items-start space-x-3">
-            <Image src="/icons/1453103.jpg" alt="メモする人" width={134} height={117} />
-            <div>
-              <p className="mb-2">
+        <section className="mt-12 border-t border-[#E8D5C4] pt-10">
+          <h2 className="mb-6 text-lg font-semibold text-zinc-900">シンプルな操作</h2>
+          <ol className="space-y-5">
+            <li className="flex items-start gap-4">
+              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#8B5E3C] text-sm font-semibold text-white shadow-sm">
+                1
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-zinc-900">📷 画像を選択</p>
+                <p className="text-xs leading-relaxed text-zinc-600">クリックまたはドラッグ&ドロップ</p>
+              </div>
+            </li>
+            <li className="flex items-start gap-4">
+              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#8B5E3C] text-sm font-semibold text-white shadow-sm">
+                2
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-zinc-900">✍️ テキスト入力と配置調整</p>
+                <p className="text-xs leading-relaxed text-zinc-600">タップで追加、ドラッグで移動、ピンチで拡大縮小</p>
+              </div>
+            </li>
+            <li className="flex items-start gap-4">
+              <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#8B5E3C] text-sm font-semibold text-white shadow-sm">
+                3
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-zinc-900">💾 保存して共有</p>
+                <p className="text-xs leading-relaxed text-zinc-600">SNSでシェアまたはダウンロード</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+
+        <section className="mt-12 border-t border-[#E8D5C4] pt-10">
+          <div className="flex flex-col gap-5">
+            <Image
+              src="/icons/1453103.jpg"
+              alt="メモする人"
+              width={170}
+              height={149}
+              className="mx-auto h-auto rounded-2xl"
+            />
+            <div className="space-y-4 text-sm leading-relaxed text-zinc-700">
+              <p>
                 このアプリは、あなたの日々の学びや気づきを画像メモとして簡単に記録・共有できるツールです。
               </p>
               <p>
@@ -132,117 +152,84 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 実績セクション */}
-        <div className="bg-[#FFF5E6] p-4 rounded-lg border-2 border-[#E8D5C4]">
-          <p className="font-bold text-center mb-3 text-gray-800">実際の投稿実績</p>
-          <div className="flex justify-around text-center">
+        <section className="mt-12 border-t border-[#E8D5C4] pt-10 text-zinc-700">
+          <h2 className="text-lg font-semibold text-zinc-900">実際の投稿実績</h2>
+          <div className="mt-5 grid grid-cols-2 gap-6">
             <div>
-              <p className="text-2xl font-bold text-gray-800">11,251</p>
-              <p className="text-xs text-gray-600">回再生</p>
+              <p className="text-3xl font-bold text-[#8B5E3C]">11,251</p>
+              <p className="mt-1 text-xs text-zinc-600">回再生</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">4,404</p>
-              <p className="text-xs text-gray-600">回再生</p>
+              <p className="text-3xl font-bold text-[#8B5E3C]">4,404</p>
+              <p className="mt-1 text-xs text-zinc-600">回再生</p>
             </div>
           </div>
-          <p className="text-xs text-center mt-3 text-gray-700">
+          <p className="mt-4 text-xs leading-relaxed text-zinc-600">
             シンプルな画像メモでも、多くの人に届いています。
           </p>
-        </div>
+          <ul className="mt-6 space-y-2 text-xs text-zinc-600">
+            <li>・無料でご利用いただけます</li>
+            <li>・投稿データはあなただけのもの（非公開）</li>
+            <li>・アカウントはいつでも削除できます</li>
+          </ul>
+        </section>
 
-        {/* 安心材料 */}
-        <ul className="text-xs text-gray-500 space-y-1 mt-4">
-          <li>・無料でご利用いただけます</li>
-          <li>・投稿データはあなただけのもの（非公開）</li>
-          <li>・アカウントはいつでも削除できます</li>
-        </ul>
+        <section className="mt-12 border-t border-[#E8D5C4] pt-10 text-sm leading-relaxed text-zinc-700">
+          <p className="text-base font-semibold text-zinc-900">「毎日投稿できる人」になりたいあなたへ</p>
 
-        {/* 既存ボタン（お試しログイン） */}
-        <div className="space-y-3 mt-4">
-          <Link href="/signup">
-            <button className="w-full bg-black text-white py-2 rounded font-bold">
-              ユーザー登録
-            </button>
-          </Link>
-          <button
-            onClick={handleGuestLogin}
-            className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
-            disabled={loading}
-          >
-            {loading ? 'ログイン中…' : 'お試しログイン'}
-          </button>
-        </div>
-
-        <section className="space-y-6 text-sm leading-relaxed text-gray-800">
-          {/* 問題提起 */}
-          <div className="bg-[#FFF5E6] p-4 rounded-lg text-center border-2 border-[#E8D5C4]">
-            <p className="font-bold mb-2">「毎日投稿できる人」になりたいあなたへ</p>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg flex items-center justify-between border-2 border-[#E8D5C4]">
-            <p className="text-left flex-1 mr-4">
+          <div className="mt-5 flex flex-col gap-4">
+            <p>
               「よし、今週こそは毎日投稿しよう」
               そう思ってアプリを開いたものの、複雑すぎて続かない。
             </p>
-            <div className="w-[155px] h-auto flex-shrink-0">
+            <div className="w-full">
               <Image
                 src="/icons/1750995.jpg"
                 alt="悩む人"
-                width={155}
-                height={124}
+                width={208}
+                height={166}
                 priority
-                className="h-auto"
+                className="mx-auto h-auto rounded-2xl"
               />
             </div>
           </div>
 
-          {/* 解決策 */}
-          <div className="bg-[#FFF5E6] p-4 rounded-lg border-2 border-[#E8D5C4]">
-            <p className="mb-3">
-              そんな経験ありませんか？SutoMemoは、考える前に<span className="font-bold text-gray-800">&ldquo;作れる&rdquo;</span>習慣をつくります。
+          <div className="mt-6 space-y-4">
+            <p>
+              そんな経験ありませんか？SutoMemoは、考える前に
+              <span className="font-semibold text-[#8B5E3C]">&ldquo;作れる&rdquo;</span>
+              習慣をつくります。
             </p>
             <p>
               画像を見ながらテキストを書けるから、自然と言葉が出てくる。タップでテキストを追加、ドラッグで移動、ピンチで拡大縮小。直感的な操作で誰でも使えます。
             </p>
-          </div>
-
-          {/* ベネフィット */}
-          <div className="bg-[#FFF5E6] p-4 rounded-lg border-2 border-[#E8D5C4]">
-            <p className="mb-3">
-              続けることで、発信は「自己ブランディング」へと変わります。
-            </p>
-            <p className="font-bold text-gray-800 mb-2">
+            <p className="font-semibold text-zinc-900">
               実際に、ユーザーの投稿は数千〜数万回も再生されています。
             </p>
-            <p>
-              気づけばあなたのフォロワーが、あなたの言葉を楽しみにしています。
-            </p>
+            <p>気づけばあなたのフォロワーが、あなたの言葉を楽しみにしています。</p>
           </div>
 
-          {/* クロージング */}
-          <div className="bg-white p-4 rounded-lg flex flex-col items-center text-center space-y-4 border-2 border-[#E8D5C4]">
+          <div className="mt-8 flex flex-col items-center gap-4 text-center">
             <Image
               src="/icons/2466299.jpg"
               alt="sns"
               width={215}
               height={167}
               priority
-              className="w-auto h-auto"
+              className="h-auto w-auto rounded-2xl"
             />
             <div>
-              <p className="font-bold text-lg mb-2">「続けられなかったあなた」</p>
-              <p>
+              <p className="text-lg font-semibold text-zinc-900">「続けられなかったあなた」</p>
+              <p className="mt-1">
                 才能ではなく<br />
                 仕組みで解決しましょう。
               </p>
             </div>
           </div>
 
-          <div className="bg-[#FFF5E6] p-5 rounded-lg text-center border-2 border-[#E8D5C4]">
-            <p className="font-bold text-gray-800 mb-2">
-              \シンプルな操作で投稿できる自分へ/
-            </p>
-            <p>
+          <div className="mt-8 text-center">
+            <p className="font-semibold text-zinc-900">\シンプルな操作で投稿できる自分へ/</p>
+            <p className="mt-2">
               今すぐ使って、<br />
               今日のあなたの言葉を<br />
               世界に届けよう
@@ -250,15 +237,13 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="space-y-3 mt-4">
+        <div className="mt-10 grid grid-cols-1 gap-3">
           <Link href="/signup">
-            <button className="w-full bg-gray-800 text-white py-2 rounded font-bold">
-              ユーザー登録
-            </button>
+            <button className={primaryButton}>ユーザー登録</button>
           </Link>
           <button
             onClick={handleGuestLogin}
-            className="w-full border border-black text-black py-2 rounded font-bold disabled:opacity-50"
+            className={secondaryButton}
             disabled={loading}
           >
             {loading ? 'ログイン中…' : 'お試しログイン'}

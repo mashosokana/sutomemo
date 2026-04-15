@@ -1,7 +1,7 @@
 // /src/app/api/posts/[id]/images/[imageId]/route.ts
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { verifyUser } from "@/lib/auth";
+import { isAdmin, verifyUser } from "@/lib/auth";
 import { IMAGE_BUCKET } from "@/lib/buckets";
 import { z } from "zod";
 import { jsonNoStore } from "@/lib/http";
@@ -25,10 +25,9 @@ export async function DELETE(
 
     // 所有者チェック（ADMINは全件可）
     const image = await prisma.image.findFirst({
-      where: 
-        user.role === "ADMIN"
-      ? { id: imageId, post: { id: postId } }
-      : { id: imageId, post: { id: postId, userId: user.id } },
+      where: isAdmin(user)
+        ? { id: imageId, post: { id: postId } }
+        : { id: imageId, post: { id: postId, userId: user.id } },
     });
     if (!image) return jsonNoStore({ error: "Image not found or forbidden" }, { status: 404 });
 
@@ -44,7 +43,7 @@ export async function DELETE(
     await prisma.image.delete({ where: { id: imageId } });
 
     const remainingImages = await prisma.image.findMany({
-      where: user.role === "ADMIN"
+      where: isAdmin(user)
         ? { postId }
         : { postId, post: { userId: user.id } },
       orderBy: { id: "asc" },

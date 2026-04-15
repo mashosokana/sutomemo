@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { IMAGE_BUCKET } from "@/lib/buckets";
-import { verifyUser } from "@/lib/auth"; 
+import { isAdmin, isGuest, verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -12,9 +12,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   try {
     const { user, error, status } = await verifyUser(req);
     if (!user) return jsonNoStore({ error }, { status });
-    
-    const g = (process.env.GUEST_USER_EMAIL ?? "").trim().toLowerCase();
-    if ((user.email ?? "").trim().toLowerCase() === g) {
+
+    if (isGuest(user)) {
       return jsonNoStore({ error: "ゲストはアップロードできません" }, { status: 403 });
     }
 
@@ -30,7 +29,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!post) {
       return jsonNoStore({ error: "投稿が存在しません"}, { status: 404 });
     }
-    if (user.role !== "ADMIN" && post.userId !== user.id) {
+    if (!isAdmin(user) && post.userId !== user.id) {
       return jsonNoStore({ error: "Forbidden" }, { status: 403 });
     }
 

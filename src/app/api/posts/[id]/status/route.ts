@@ -1,6 +1,6 @@
 // src/app/api/posts/[id]/status/route.ts
 import { prisma } from "@/lib/prisma";
-import { verifyUser } from "@/lib/auth";
+import { isAdmin, verifyUser } from "@/lib/auth";
 import { jsonNoStore } from "@/lib/http";
 import type { PostStatus } from "@prisma/client";
 
@@ -48,7 +48,7 @@ export async function PATCH(
       return jsonNoStore({ error: "投稿が存在しません" }, { status: 404 });
     }
 
-    if (user.role !== "ADMIN" && target.userId !== user.id) {
+    if (!isAdmin(user) && target.userId !== user.id) {
       return jsonNoStore({ error: "権限がありません" }, { status: 403 });
     }
 
